@@ -75,8 +75,8 @@ videojuego/
 Sprite (base)
  ├── Collectible
  │    ├── Trap
- │    ├── Treasure
- │    └── Enemy
+ │    └── Treasure
+ │    
  ├── Weapon
  ├── Shield
  └── Projectile
@@ -594,7 +594,7 @@ manager.exec()
 
 ### Ejemplo: detección de colisión
 
-En lugar de repetir la lógica de colisión circular en `Trap`, `Treasure` y `Enemy`, se centraliza en `Sprite` o en una función de utilidad:
+En lugar de repetir la lógica de colisión circular en `Trap`, y `Treasure` , se centraliza en `Sprite` o en una función de utilidad:
 
 ```python
 # core/collision.py
@@ -607,7 +607,7 @@ def are_circles_overlapping(
     """Retorna True si dos círculos definidos por posición y radio se solapan."""
     return position_a.distancia_a(position_b) < (radius_a + radius_b)
 
-# Uso en Enemy, Trap, Treasure — sin duplicar la fórmula
+# Uso en Trap, Treasure — sin duplicar la fórmula
 from core.collision import are_circles_overlapping
 
 if are_circles_overlapping(self.position, self.radius, player.position, player.radius):
@@ -721,5 +721,7 @@ Antes de aceptar cualquier bloque de código sugerido por IA, verificar:
 - [ ] ¿El código pasa `mypy --strict` sin errores?
 
 ---
+
+*Si deseas aportar  a la mejora de este archivo guia es importante abrir un Pull Request, ❌ no se permiten modificaciones sin previa revisión*
 
 *Fin del documento — última actualización: versión inicial.*
