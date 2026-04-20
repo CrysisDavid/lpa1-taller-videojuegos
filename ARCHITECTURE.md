@@ -36,31 +36,40 @@ El proyecto sigue un diseño orientado a objetos con responsabilidades claras po
 ```
 videojuego/
 ├── main.py                  # Punto de entrada: instancia GameManager y llama exec()
-├── arquitectura.md          # Este archivo — fuente de verdad
+├── ARCHITECTURE.md          # Este archivo — fuente de verdad
+├── README.md                # Requerimientos del taller
+├── WORLD_MECHANICS.md       # Diseño de mecánicas del mundo
+├── WORLD_README.md          # Documentación del módulo world
+├── requirements.txt         # Dependencias de Python
 ├── core/
+│   ├── __init__.py
 │   ├── vector2d.py          # Clase Vector2D (matemáticas 2D)
-│   ├── sprite.py            # Clase base Sprite
-│   └── game_manager.py      # Clase GameManager (bucle principal)
+│   └── sprite.py            # Clase base Sprite
 ├── entities/
-│   ├── player.py            # Clase Player
-│   ├── enemy.py             # Clase Enemy
-│   ├── collectible.py       # Clase base Collectible
-│   ├── trap.py              # Clase Trap
-│   └── treasure.py          # Clase Treasure
+│   ├── __init__.py
+│   ├── collectible.py        # Clase base Collectible
+│   ├── trap.py               # Clase Trap
+│   └── treasure.py           # Clase Treasure
 ├── combat/
-│   ├── weapon.py            # Clase Weapon
-│   ├── shield.py            # Clase Shield
-│   └── projectile.py        # Clase Projectile
+│   ├── __init__.py
+│   └── shield.py             # Clase Shield
 ├── world/
+│   ├── __init__.py
 │   ├── world.py             # Clase World
 │   ├── platform.py          # Clase Platform
 │   └── camera.py            # Clase Camera
 ├── inventory/
-│   ├── inventory.py         # Clase Inventory
-│   ├── item.py              # Clase Item
-│   └── store.py             # Clase Store
+│   └── __init__.py
 └── stats/
-    └── stats.py             # Clase Stats
+    └── __init__.py
+
+tests/
+├── test_world_mechanics.py  # Pruebas del módulo de mundo
+└── demo_world_integration.py # Demo visual de integración World + Collectibles
+
+docs/
+├── classDiagram.mmd         # Fuente Mermaid del diagrama de clases
+└── diagrama_clases.md       # Diagrama de clases en Markdown + Mermaid
 ```
 
 **Regla:** un archivo = una clase principal. No agrupar clases no relacionadas en el mismo módulo.
@@ -74,12 +83,13 @@ videojuego/
 ```
 Sprite (base)
  ├── Collectible
+ │    ├── Shield
  │    ├── Trap
  │    └── Treasure
- │    
- ├── Weapon
- ├── Shield
- └── Projectile
+ ├── Player
+ ├── Enemy
+ │    └── BossEnemy
+ └── Proyectile
 ```
 
 ### Composición (has-a)
@@ -88,10 +98,17 @@ Sprite (base)
 GameManager ◆── World
 GameManager ◆── Player
 GameManager ◆── Enemy
+GameManager ◆── HUD
 Player      ◆── Inventory
 Player      ◆── Stats
 World       ◆── List[Platform]
-Store       ◆── List[Item]
+```
+
+### Agregación (contains)
+
+```
+Inventory  ◇── List[Item]
+Store      ◇── List[Item]
 ```
 
 ### Uso (uses)
@@ -101,8 +118,13 @@ Sprite      ──> Vector2D  (posición)
 Camera      ──> Vector2D  (offset, velocidad de scroll)
 Platform    ──> Vector2D  (pos, size)
 Enemy       ──> Vector2D  (size, velocity, pos)
-GameManager ──> Stats      (<<use>> — consulta estadísticas del jugador)
 Player      ──> Vector2D  (hereda de Sprite)
+Proyectile  ──> Vector2D  (dirección y movimiento)
+Trap        ──> Vector2D  (zona de explosión)
+Store       ──> Vector2D  (posición de la zona de venta)
+Player      ──> CombatSystem (resolver combate)
+Enemy       ──> CombatSystem (resolver combate)
+HUD         ──> Player (mostrar estado)
 ```
 
 ### Responsabilidades por clase
@@ -111,22 +133,24 @@ Player      ──> Vector2D  (hereda de Sprite)
 |---|---|
 | `Vector2D` | Matemáticas de vectores 2D: suma, resta, normalización, distancia, lerp, dot |
 | `Sprite` | Estado y dibujo base de cualquier entidad visual en pantalla |
-| `Player` | Estado del jugador: dinero, salud, inventario, estadísticas |
-| `Enemy` | Comportamiento y movimiento del enemigo en el mundo |
-| `Collectible` | Lógica compartida de objetos recogibles (activación, detección de colisión) |
-| `Trap` | Efecto negativo al contacto con el jugador |
-| `Treasure` | Recompensa al ser recogido por el jugador |
-| `Weapon` | Disparar proyectiles hacia una dirección |
-| `Shield` | Absorber o reducir daño recibido por el portador |
-| `Projectile` | Moverse en línea recta y detectar colisión con entidades |
-| `Stats` | Contener y validar las estadísticas de una entidad (salud máx., resistencia, daño) |
-| `Inventory` | Gestionar la lista de ítems que posee el jugador |
-| `Item` | Representar un ítem con precio y atributos propios |
-| `Store` | Exponer ítems disponibles para compra y procesar transacciones |
+| `Player` | Acciones del jugador: atacar, defender, recolectar, comprar/vender y progresar |
+| `Enemy` | Comportamiento de enemigos con atributos de combate y tipo de entidad |
+| `BossEnemy` | Variante de enemigo final con fases y ataques especiales |
+| `Collectible` | Lógica compartida de objetos recogibles con tiempo de vida |
+| `Shield` | Objeto defensivo recolectable con duración |
+| `Trap` | Trampa explosiva con daño y alcance de explosión |
+| `Treasure` | Recompensa monetaria recolectable |
+| `Proyectile` | Entidad de movimiento lineal usada en ataques a distancia |
+| `Stats` | Gestión de estadísticas y progresión: nivel, experiencia y mejora de atributos |
+| `Inventory` | Gestión de ítems del jugador (agregar y remover) |
+| `Item` | Equipamiento con bonus de ataque/defensa y precios de compra/venta |
+| `Store` | Gestión de inventario comercial y transacciones con el jugador |
+| `CombatSystem` | Cálculo de daño y resolución de combate con efectos especiales |
+| `HUD` | Mostrar vida, inventario, nivel y retroalimentación visual al jugador |
 | `Camera` | Traducir coordenadas del mundo a coordenadas de pantalla y viceversa |
 | `Platform` | Representar una superficie sobre la que el jugador puede pararse |
-| `World` | Contener y dibujar todas las plataformas del nivel |
-| `GameManager` | Orquestar el bucle de juego: eventos, actualización, renderizado |
+| `World` | Generación y dibujo del mundo, incluyendo distribución de elementos |
+| `GameManager` | Orquestar bucle de juego, puntaje, progreso de exploración y victoria |
 
 ---
 
@@ -698,7 +722,7 @@ Al iniciar una sesión de desarrollo asistida por IA, incluir el siguiente promp
 
 ```
 Estás asistiendo en el desarrollo de un videojuego en Python con Pygame.
-El proyecto sigue las reglas definidas en arquitectura.md:
+El proyecto sigue las reglas definidas en ARCHITECTURE.md:
 - Tipado estricto en todos los parámetros, atributos y retornos (PEP 484, mypy --strict).
 - Nombres autodocumentados: sin abreviaciones, sin variables genéricas.
 - Principios SOLID y DRY.
