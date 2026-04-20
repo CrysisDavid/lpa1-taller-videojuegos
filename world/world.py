@@ -3,8 +3,8 @@ from typing import List
 
 import pygame
 
+from combat.shield import Shield
 from core.vector2d import Vector2D
-from entities.shield import Shield
 from entities.trap import Trap
 from entities.treasure import Treasure
 from world.camera import Camera

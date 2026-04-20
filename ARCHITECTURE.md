@@ -46,25 +46,30 @@ videojuego/
 │   ├── vector2d.py          # Clase Vector2D (matemáticas 2D)
 │   └── sprite.py            # Clase base Sprite
 ├── entities/
-│   └── __init__.py          # Paquete para clases de entidades (pendiente de implementación)
+│   ├── __init__.py
+│   ├── collectible.py        # Clase base Collectible
+│   ├── trap.py               # Clase Trap
+│   └── treasure.py           # Clase Treasure
 ├── combat/
 │   ├── __init__.py
-│   └── shield.py            # Clase Shield (implementación actual)
+│   └── shield.py             # Clase Shield
 ├── world/
 │   ├── __init__.py
 │   ├── world.py             # Clase World
 │   ├── platform.py          # Clase Platform
 │   └── camera.py            # Clase Camera
 ├── inventory/
-│   └── __init__.py          # Paquete para inventario/tienda (pendiente de implementación)
+│   └── __init__.py
 └── stats/
-    └── __init__.py          # Paquete para estadísticas (pendiente de implementación)
+    └── __init__.py
 
 tests/
-└── test_world_mechanics.py  # Pruebas del módulo de mundo
+├── test_world_mechanics.py  # Pruebas del módulo de mundo
+└── demo_world_integration.py # Demo visual de integración World + Collectibles
 
 docs/
-└── diagrama_clases.md       # Diagrama de clases en Mermaid
+├── classDiagram.mmd         # Fuente Mermaid del diagrama de clases
+└── diagrama_clases.md       # Diagrama de clases en Markdown + Mermaid
 ```
 
 **Regla:** un archivo = una clase principal. No agrupar clases no relacionadas en el mismo módulo.
