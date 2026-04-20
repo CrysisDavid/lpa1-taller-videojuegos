@@ -1,7 +1,9 @@
+import random
 from typing import List
 
 import pygame
 
+from core.vector2d import Vector2D
 from world.camera import Camera
 from world.platform import Platform
 
@@ -15,6 +17,9 @@ class World:
     PLATFORM_COLOR: tuple[int, int, int] = (100, 150, 100)
     GROUND_Y: float = 550.0
     PLATFORM_SPACING: int = 180
+    DEFAULT_ENEMY_COUNT: int = 6
+    DEFAULT_COLLECTIBLE_COUNT: int = 10
+    PLATFORM_TOP_OFFSET: float = 30.0
 
     def __init__(self, screen: pygame.Surface) -> None:
         """
@@ -26,6 +31,8 @@ class World:
         self.screen: pygame.Surface = screen
         self.camera: Camera = Camera(scroll_speed=self.CAMERA_SCROLL_SPEED)
         self.platforms: List[Platform] = []
+        self.enemy_spawn_points: List[Vector2D] = []
+        self.collectible_spawn_points: List[Vector2D] = []
         self._initialize_platforms()
 
     def _initialize_platforms(self) -> None:
@@ -54,6 +61,96 @@ class World:
             platform (Platform): Plataforma a agregar.
         """
         self.platforms.append(platform)
+
+    def generate(
+        self,
+        seed: int | None = None,
+        enemy_count: int = DEFAULT_ENEMY_COUNT,
+        collectible_count: int = DEFAULT_COLLECTIBLE_COUNT,
+    ) -> None:
+        """
+        Regenera el mundo base y distribuye enemigos/objetos de forma aleatoria.
+
+        Args:
+            seed (int | None): Semilla opcional para generación determinística.
+            enemy_count (int): Cantidad de enemigos a ubicar.
+            collectible_count (int): Cantidad de objetos a ubicar.
+        """
+        self.platforms = []
+        self._initialize_platforms()
+        rng: random.Random = random.Random(seed)
+        self.place_enemies(enemy_count, rng=rng)
+        self.place_collectibles(collectible_count, rng=rng)
+
+    def place_enemies(
+        self,
+        count: int = DEFAULT_ENEMY_COUNT,
+        rng: random.Random | None = None,
+    ) -> List[Vector2D]:
+        """
+        Ubica enemigos en posiciones válidas sobre plataformas existentes.
+
+        Args:
+            count (int): Cantidad de enemigos a distribuir.
+            rng (random.Random | None): Generador aleatorio opcional.
+
+        Returns:
+            List[Vector2D]: Posiciones generadas para enemigos.
+        """
+        self.enemy_spawn_points = self._place_points_on_platforms(
+            count=count,
+            vertical_offset=self.PLATFORM_TOP_OFFSET,
+            rng=rng,
+        )
+        return self.enemy_spawn_points
+
+    def place_collectibles(
+        self,
+        count: int = DEFAULT_COLLECTIBLE_COUNT,
+        rng: random.Random | None = None,
+    ) -> List[Vector2D]:
+        """
+        Ubica objetos recolectables en posiciones válidas sobre plataformas.
+
+        Args:
+            count (int): Cantidad de objetos a distribuir.
+            rng (random.Random | None): Generador aleatorio opcional.
+
+        Returns:
+            List[Vector2D]: Posiciones generadas para recolectables.
+        """
+        self.collectible_spawn_points = self._place_points_on_platforms(
+            count=count,
+            vertical_offset=self.PLATFORM_TOP_OFFSET,
+            rng=rng,
+        )
+        return self.collectible_spawn_points
+
+    def _place_points_on_platforms(
+        self,
+        count: int,
+        vertical_offset: float,
+        rng: random.Random | None = None,
+    ) -> List[Vector2D]:
+        """Genera puntos aleatorios sobre plataformas para entidades del mundo."""
+        if count <= 0 or not self.platforms:
+            return []
+
+        random_generator: random.Random = rng if rng is not None else random
+        points: List[Vector2D] = []
+
+        for _ in range(count):
+            platform: Platform = random_generator.choice(self.platforms)
+            x_min: float = platform.x + 8.0
+            x_max: float = platform.x + platform.width - 8.0
+            if x_min > x_max:
+                x_min = platform.x
+                x_max = platform.x + platform.width
+            world_x: float = random_generator.uniform(x_min, x_max)
+            world_y: float = platform.y - vertical_offset
+            points.append(Vector2D(world_x, world_y))
+
+        return points
 
     def update(self, delta_time: float) -> None:
         """
