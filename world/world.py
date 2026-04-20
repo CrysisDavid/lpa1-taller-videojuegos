@@ -4,6 +4,9 @@ from typing import List
 import pygame
 
 from core.vector2d import Vector2D
+from entities.shield import Shield
+from entities.trap import Trap
+from entities.treasure import Treasure
 from world.camera import Camera
 from world.platform import Platform
 
@@ -20,6 +23,11 @@ class World:
     DEFAULT_ENEMY_COUNT: int = 6
     DEFAULT_COLLECTIBLE_COUNT: int = 10
     PLATFORM_TOP_OFFSET: float = 30.0
+    DEFAULT_SHIELD_DURATION: float = 10.0
+    DEFAULT_SHIELD_DEFENSE: float = 5.0
+    DEFAULT_TRAP_DAMAGE: float = 20.0
+    DEFAULT_TRAP_RANGE: float = 60.0
+    DEFAULT_TREASURE_BASE_VALUE: float = 50.0
 
     def __init__(self, screen: pygame.Surface) -> None:
         """
@@ -33,6 +41,7 @@ class World:
         self.platforms: List[Platform] = []
         self.enemy_spawn_points: List[Vector2D] = []
         self.collectible_spawn_points: List[Vector2D] = []
+        self.collectibles: List[Shield | Trap | Treasure] = []
         self._initialize_platforms()
 
     def _initialize_platforms(self) -> None:
@@ -77,10 +86,12 @@ class World:
             collectible_count (int): Cantidad de objetos a ubicar.
         """
         self.platforms = []
+        self.collectibles = []
         self._initialize_platforms()
         rng: random.Random = random.Random(seed)
         self.place_enemies(enemy_count, rng=rng)
         self.place_collectibles(collectible_count, rng=rng)
+        self._instantiate_collectibles(rng)
 
     def place_enemies(
         self,
@@ -126,6 +137,39 @@ class World:
         )
         return self.collectible_spawn_points
 
+    def _instantiate_collectibles(self, rng: random.Random) -> None:
+        """Crea instancias reales de collectibles basadas en spawn points."""
+        for point in self.collectible_spawn_points:
+            collectible_type: int = rng.randint(0, 2)
+            if collectible_type == 0:
+                collectible = Shield(
+                    self.screen,
+                    point.x,
+                    point.y,
+                    duration=self.DEFAULT_SHIELD_DURATION,
+                    defense_boost=self.DEFAULT_SHIELD_DEFENSE,
+                    description="Escudo encontrado",
+                )
+            elif collectible_type == 1:
+                collectible = Trap(
+                    self.screen,
+                    point.x,
+                    point.y,
+                    explosion_damage=self.DEFAULT_TRAP_DAMAGE,
+                    explosion_range=self.DEFAULT_TRAP_RANGE,
+                    description="Trampa peligrosa",
+                )
+            else:
+                treasure_value: float = self.DEFAULT_TREASURE_BASE_VALUE * rng.uniform(0.5, 2.0)
+                collectible = Treasure(
+                    self.screen,
+                    point.x,
+                    point.y,
+                    name=f"Tesoro #{len(self.collectibles)}",
+                    monetary_value=treasure_value,
+                )
+            self.collectibles.append(collectible)
+
     def _place_points_on_platforms(
         self,
         count: int,
@@ -154,7 +198,7 @@ class World:
 
     def update(self, delta_time: float) -> None:
         """
-        Actualiza el estado del mundo (movimiento de cámara).
+        Actualiza el estado del mundo (movimiento de cámara y entidades).
 
         Args:
             delta_time (float): Tiempo transcurrido en segundos desde el
@@ -162,6 +206,9 @@ class World:
         """
         self.camera.update(delta_time)
         self._generate_distant_platforms()
+        for collectible in self.collectibles:
+            if collectible.is_active:
+                collectible.update(delta_time)
 
     def _generate_distant_platforms(self) -> None:
         """
@@ -197,7 +244,7 @@ class World:
         camera_offset_x: float,
     ) -> None:
         """
-        Renderiza todas las plataformas visibles del mundo.
+        Renderiza todas las plataformas y collectibles visibles del mundo.
 
         Args:
             surface (pygame.Surface): Superficie donde renderizar.
@@ -208,3 +255,9 @@ class World:
         for platform in self.platforms:
             if platform.is_on_screen(screen_width, camera_offset_x):
                 platform.draw(surface, camera_offset_x)
+
+        for collectible in self.collectibles:
+            if collectible.is_active:
+                screen_x: float = collectible.x - camera_offset_x
+                if -50 <= screen_x <= screen_width + 50:
+                    collectible.draw()
