@@ -4,6 +4,7 @@ import pygame
 
 from core.sprite import Sprite
 from core.vector2d import Vector2D
+from entities.proyectile import Proyectile
 from inventory.inventory import Inventory
 from inventory.item import Item
 from stats.stats import Stats
@@ -14,6 +15,7 @@ class Player(Sprite):
 
     DEFAULT_COLOR: tuple[int, int, int] = (80, 150, 220)
     DEFAULT_RADIUS: int = 24
+    DEFAULT_SHOT_COOLDOWN: float = 0.35
 
     def __init__(
         self,
@@ -43,32 +45,40 @@ class Player(Sprite):
         self.stats: Stats = stats if stats is not None else Stats()
         self.inventory: Inventory = inventory if inventory is not None else Inventory()
         self.health: float = self.stats.max_health
+        self.shot_cooldown: float = self.DEFAULT_SHOT_COOLDOWN
+        self._last_shot_time: float = float("-inf")
 
     # ------------------------------------------------------------------
     # Combate
     # ------------------------------------------------------------------
 
-    def attack(self, enemy: object) -> float:
-        """Ataca a un enemigo y retorna el daño infligido."""
+    def shoot(
+        self,
+        direction: Vector2D,
+        current_time: float,
+        *,
+        projectile_velocity: float = 400.0,
+        projectile_life_time: float = 2.0,
+    ) -> Proyectile | None:
+        """Dispara un proyectil si la cadencia lo permite."""
+        if current_time < 0:
+            raise ValueError("current_time no puede ser negativo")
         if not self.is_active:
-            return 0.0
+            return None
+        if (current_time - self._last_shot_time) < self.shot_cooldown:
+            return None
 
-        raw_damage: float = self.stats.damage
-
-        # Bonus de ítems equipados en inventario
-        for item in self.inventory.items:
-            raw_damage += item.attack_boost
-
-        enemy_defense: float = float(getattr(enemy, "defense", 0.0))
-        final_damage: float = max(0.0, raw_damage - enemy_defense)
-
-        if hasattr(enemy, "take_damage") and callable(enemy.take_damage):
-            enemy.take_damage(final_damage)
-        elif hasattr(enemy, "health"):
-            new_health: float = max(0.0, float(enemy.health) - final_damage)
-            setattr(enemy, "health", new_health)
-
-        return final_damage
+        projectile = Proyectile(
+            screen=self.screen,
+            x=self.x,
+            y=self.y,
+            direction=direction,
+            velocity=projectile_velocity,
+            stats=self.stats,
+            life_time=projectile_life_time,
+        )
+        self._last_shot_time = current_time
+        return projectile
 
     def defend(self, damage: float) -> float:
         """Recibe daño, aplica defensa y retorna el daño neto recibido."""

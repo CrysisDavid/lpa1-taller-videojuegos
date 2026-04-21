@@ -60,8 +60,9 @@ classDiagram
         - float health
         - Inventory inventory
         - Stats stats
-        + attack(enemy: Enemy) void
-        + shoot(direction: Vector2D) Proyectile
+        - float shot_cooldown
+        - float last_shot_time
+        + shoot(direction: Vector2D, current_time: float) Proyectile
         + defend(damage: float) float
         + collect(collectible: Collectible) void
         + use_item(item: Item) void
