@@ -29,6 +29,7 @@ class World:
     DEFAULT_TRAP_DAMAGE: float = 20.0
     DEFAULT_TRAP_RANGE: float = 60.0
     DEFAULT_TREASURE_BASE_VALUE: float = 50.0
+    RESPAWN_VERTICAL_OFFSET: float = 30.0
 
     def __init__(self, screen: pygame.Surface) -> None:
         """
@@ -44,6 +45,7 @@ class World:
         self.collectible_spawn_points: List[Vector2D] = []
         self.collectibles: List[Shield | Trap | Treasure] = []
         self.enemies: List[Enemy] = []
+        self._rng: random.Random = random.Random()
         self._initialize_platforms()
 
     def _initialize_platforms(self) -> None:
@@ -87,15 +89,42 @@ class World:
             enemy_count (int): Cantidad de enemigos a ubicar.
             collectible_count (int): Cantidad de objetos a ubicar.
         """
+        # Reinicia la cámara para volver a renderizar desde el inicio del nivel.
+        self.camera.offset.x = 0.0
+        self.camera.offset.y = 0.0
         self.platforms = []
+        self.enemy_spawn_points = []
+        self.collectible_spawn_points = []
         self.collectibles = []
         self.enemies = []
         self._initialize_platforms()
         rng: random.Random = random.Random(seed)
+        self._rng = rng
         self.place_enemies(enemy_count, rng=rng)
         self.place_collectibles(collectible_count, rng=rng)
         self._instantiate_collectibles(rng)
         self._instantiate_enemies(rng)
+
+    def _random_x_on_platform(self, platform: Platform) -> float:
+        """Retorna una coordenada X válida para colocar una entidad sobre una plataforma."""
+        x_min: float = platform.x + 8.0
+        x_max: float = platform.x + platform.width - 8.0
+        if x_min > x_max:
+            x_min = platform.x
+            x_max = platform.x + platform.width
+        return self._rng.uniform(x_min, x_max)
+
+    def _spawn_entities_for_platform(self, platform: Platform) -> None:
+        """Regenera un enemy y un collectible al crear una nueva plataforma."""
+        spawn_y: float = platform.y - self.RESPAWN_VERTICAL_OFFSET
+
+        enemy_point: Vector2D = Vector2D(self._random_x_on_platform(platform), spawn_y)
+        self.enemy_spawn_points.append(enemy_point)
+        self._instantiate_enemies(self._rng)
+
+        collectible_point: Vector2D = Vector2D(self._random_x_on_platform(platform), spawn_y)
+        self.collectible_spawn_points.append(collectible_point)
+        self._instantiate_collectibles(self._rng)
 
     def place_enemies(
         self,
@@ -143,7 +172,8 @@ class World:
 
     def _instantiate_collectibles(self, rng: random.Random) -> None:
         """Crea instancias reales de collectibles basadas en spawn points."""
-        for point in self.collectible_spawn_points:
+        start_index: int = len(self.collectibles)
+        for point in self.collectible_spawn_points[start_index:]:
             collectible_type: int = rng.randint(0, 2)
             if collectible_type == 0:
                 collectible = Shield(
@@ -178,7 +208,8 @@ class World:
         """Crea instancias reales de Enemy basadas en los spawn points."""
         enemy_names: list[str] = ["Golem", "Slime", "Skeleton", "Orc", "Bat", "Spider"]
         enemy_types: list[str] = ["terrestre", "terrestre", "terrestre", "terrestre", "volador", "terrestre"]
-        for i, point in enumerate(self.enemy_spawn_points):
+        start_index: int = len(self.enemies)
+        for i, point in enumerate(self.enemy_spawn_points[start_index:], start=start_index):
             idx: int = i % len(enemy_names)
             enemy: Enemy = Enemy(
                 self.screen,
@@ -261,6 +292,7 @@ class World:
                 color=self.PLATFORM_COLOR,
             )
             self.platforms.append(new_platform)
+            self._spawn_entities_for_platform(new_platform)
 
     def draw(
         self,
