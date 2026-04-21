@@ -61,6 +61,7 @@ classDiagram
         - Inventory inventory
         - Stats stats
         + attack(enemy: Enemy) void
+        + shoot(direction: Vector2D) Proyectile
         + defend(damage: float) float
         + collect(collectible: Collectible) void
         + use_item(item: Item) void
@@ -135,8 +136,11 @@ classDiagram
         - float velocity
         - Vector2D direction
         - float life_time
-        + constructor(screen, x, y, direction, velocity)
-        + update(dt) void
+        - float damage
+        + constructor(screen, x, y, direction, velocity, damage, life_time)
+        + update(dt: float) void
+        + hit(enemy: Enemy) float
+        + remaining_life_time() float
     }
 
     class CombatSystem {
@@ -218,6 +222,7 @@ classDiagram
 
     %% Dependencias
     Player ..> CombatSystem : use
+    Player ..> Proyectile : creates
     Enemy ..> CombatSystem : use
     HUD ..> Player : use
     Sprite ..> Vector2D : use
