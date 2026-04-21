@@ -136,8 +136,8 @@ classDiagram
         - float velocity
         - Vector2D direction
         - float life_time
-        - float damage
-        + constructor(screen, x, y, direction, velocity, damage, life_time)
+        - Stats stats
+        + constructor(screen, x, y, direction, velocity, stats, life_time)
         + update(dt: float) void
         + hit(enemy: Enemy) float
         + remaining_life_time() float
