@@ -1,6 +1,6 @@
 """
-Demo visual de integración del mundo con collectibles.
-Muestra plataformas, scroll, generación procedural y collectibles instanciados.
+Demo visual de integración del mundo con collectibles y enemigos.
+Muestra plataformas, scroll, generación procedural, collectibles y enemigos instanciados.
 """
 
 import sys
@@ -13,6 +13,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from combat.shield import Shield
 from core.vector2d import Vector2D
+from entities.enemy import Enemy
 from entities.trap import Trap
 from entities.treasure import Treasure
 from world.world import World
@@ -50,14 +51,14 @@ def main() -> None:
     screen: pygame.Surface = pygame.display.set_mode(
         (SCREEN_WIDTH, SCREEN_HEIGHT)
     )
-    pygame.display.set_caption("Demo - Mundo con Collectibles Integrados")
+    pygame.display.set_caption("Demo - Mundo con Collectibles y Enemigos")
 
     clock: pygame.time.Clock = pygame.time.Clock()
     is_running: bool = True
 
-    # Crear el mundo y generar con collectibles
+    # Crear el mundo y generar con collectibles y enemigos
     world: World = World(screen=screen)
-    world.generate(seed=2026, collectible_count=12, enemy_count=0)
+    world.generate(seed=2026, collectible_count=12, enemy_count=6)
 
     # Variables para visualización
     frame_count: int = 0
@@ -80,7 +81,7 @@ def main() -> None:
                     world.generate(
                         seed=frame_count,
                         collectible_count=12,
-                        enemy_count=0,
+                        enemy_count=6,
                     )
 
         # Actualizar mundo
@@ -111,7 +112,7 @@ def main() -> None:
 
         # Título
         title_surface: pygame.Surface = font_large.render(
-            "DEMO: Mundo con Collectibles",
+            "DEMO: Mundo con Collectibles y Enemigos",
             True,
             (100, 200, 255),
         )
@@ -161,6 +162,15 @@ def main() -> None:
             font_small, treasure_info, (250, 200, 40), UI_BG_COLOR
         )
         screen.blit(treasure_surface, (info_x, info_y))
+        info_y += 28
+
+        # Contador de enemigos
+        active_enemies: int = sum(1 for e in world.enemies if not e.is_defeated)
+        enemies_info: str = f"Enemigos Activos: {active_enemies}/{len(world.enemies)}"
+        enemies_surface: pygame.Surface = render_text_with_background(
+            font_medium, enemies_info, (255, 120, 120), UI_BG_COLOR
+        )
+        screen.blit(enemies_surface, (info_x, info_y))
         info_y += 28
 
         # Instrucciones

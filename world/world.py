@@ -5,6 +5,7 @@ import pygame
 
 from combat.shield import Shield
 from core.vector2d import Vector2D
+from entities.enemy import Enemy
 from entities.trap import Trap
 from entities.treasure import Treasure
 from world.camera import Camera
@@ -42,6 +43,7 @@ class World:
         self.enemy_spawn_points: List[Vector2D] = []
         self.collectible_spawn_points: List[Vector2D] = []
         self.collectibles: List[Shield | Trap | Treasure] = []
+        self.enemies: List[Enemy] = []
         self._initialize_platforms()
 
     def _initialize_platforms(self) -> None:
@@ -87,11 +89,13 @@ class World:
         """
         self.platforms = []
         self.collectibles = []
+        self.enemies = []
         self._initialize_platforms()
         rng: random.Random = random.Random(seed)
         self.place_enemies(enemy_count, rng=rng)
         self.place_collectibles(collectible_count, rng=rng)
         self._instantiate_collectibles(rng)
+        self._instantiate_enemies(rng)
 
     def place_enemies(
         self,
@@ -170,6 +174,23 @@ class World:
                 )
             self.collectibles.append(collectible)
 
+    def _instantiate_enemies(self, rng: random.Random) -> None:
+        """Crea instancias reales de Enemy basadas en los spawn points."""
+        enemy_names: list[str] = ["Golem", "Slime", "Skeleton", "Orc", "Bat", "Spider"]
+        enemy_types: list[str] = ["terrestre", "terrestre", "terrestre", "terrestre", "volador", "terrestre"]
+        for i, point in enumerate(self.enemy_spawn_points):
+            idx: int = i % len(enemy_names)
+            enemy: Enemy = Enemy(
+                self.screen,
+                point,
+                name=f"{enemy_names[idx]} #{i + 1}",
+                enemy_type=enemy_types[idx],
+                health=rng.uniform(60.0, 120.0),
+                attack_power=rng.uniform(8.0, 20.0),
+                defense=rng.uniform(2.0, 8.0),
+            )
+            self.enemies.append(enemy)
+
     def _place_points_on_platforms(
         self,
         count: int,
@@ -209,6 +230,9 @@ class World:
         for collectible in self.collectibles:
             if collectible.is_active:
                 collectible.update(delta_time)
+        for enemy in self.enemies:
+            if not enemy.is_defeated:
+                enemy.update(delta_time)
 
     def _generate_distant_platforms(self) -> None:
         """
@@ -261,3 +285,9 @@ class World:
                 screen_x: float = collectible.x - camera_offset_x
                 if -50 <= screen_x <= screen_width + 50:
                     collectible.draw()
+
+        for enemy in self.enemies:
+            if not enemy.is_defeated:
+                screen_x = enemy.x - camera_offset_x
+                if -50 <= screen_x <= screen_width + 50:
+                    enemy.draw()
