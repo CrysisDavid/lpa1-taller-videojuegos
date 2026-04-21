@@ -9,6 +9,9 @@ import pygame
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from entities.enemy import Enemy
+from combat.shield import Shield
+from entities.trap import Trap
+from entities.treasure import Treasure
 from world.world import World
 
 SCREEN_W, SCREEN_H = 800, 600
@@ -71,6 +74,65 @@ class TestWorldEnemyIntegration(unittest.TestCase):
             self.world.draw(surface=self.screen, camera_offset_x=0.0)
         except Exception as exc:
             self.fail(f"draw() lanzó una excepción inesperada: {exc}")
+
+    def test_scroll_regenera_enemigos_y_collectibles(self) -> None:
+        """Al generar plataformas nuevas deben aparecer nuevos enemies y collectibles."""
+        self.world.generate(seed=11, enemy_count=0, collectible_count=0)
+
+        initial_platforms = len(self.world.platforms)
+        initial_enemies = len(self.world.enemies)
+        initial_collectibles = len(self.world.collectibles)
+
+        screen_width = self.screen.get_width()
+        furthest_x = max(platform.x for platform in self.world.platforms)
+        self.world.camera.offset.x = (furthest_x - screen_width) + 1.0
+
+        self.world.update(delta_time=0.0)
+
+        self.assertGreater(len(self.world.platforms), initial_platforms)
+        self.assertGreater(len(self.world.enemies), initial_enemies)
+        self.assertGreater(len(self.world.collectibles), initial_collectibles)
+
+    def test_collectible_regenerado_es_de_tipo_valido(self) -> None:
+        """Los collectibles regenerados deben ser Shield, Trap o Treasure."""
+        self.world.generate(seed=21, enemy_count=0, collectible_count=0)
+
+        screen_width = self.screen.get_width()
+        furthest_x = max(platform.x for platform in self.world.platforms)
+        self.world.camera.offset.x = (furthest_x - screen_width) + 1.0
+
+        self.world.update(delta_time=0.0)
+
+        self.assertGreater(len(self.world.collectibles), 0)
+        self.assertIsInstance(self.world.collectibles[-1], (Shield, Trap, Treasure))
+
+    def test_generate_reinicia_camara_y_spawn_points(self) -> None:
+        """generate() debe resetear cámara y limpiar spawn points acumulados."""
+        self.world.generate(seed=1, enemy_count=2, collectible_count=2)
+
+        # Simula avance para crear nuevas plataformas y spawns dinámicos
+        screen_width = self.screen.get_width()
+        furthest_x = max(platform.x for platform in self.world.platforms)
+        self.world.camera.offset.x = (furthest_x - screen_width) + 1.0
+        self.world.update(delta_time=0.0)
+
+        # Vuelve a regenerar y valida reset total
+        self.world.generate(seed=2, enemy_count=2, collectible_count=2)
+        self.assertEqual(self.world.camera.offset.x, 0.0)
+        self.assertEqual(len(self.world.enemy_spawn_points), 2)
+        self.assertEqual(len(self.world.collectible_spawn_points), 2)
+
+        # Con cámara reseteada deben existir elementos visibles en pantalla
+        visible_enemies = [
+            e for e in self.world.enemies if -50 <= (e.x - self.world.camera.offset.x) <= SCREEN_W + 50
+        ]
+        visible_collectibles = [
+            c
+            for c in self.world.collectibles
+            if c.is_active and -50 <= (c.x - self.world.camera.offset.x) <= SCREEN_W + 50
+        ]
+        self.assertGreater(len(visible_enemies), 0)
+        self.assertGreater(len(visible_collectibles), 0)
 
 
 if __name__ == "__main__":
