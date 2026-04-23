@@ -16,6 +16,8 @@ class Player(Sprite):
     DEFAULT_COLOR: tuple[int, int, int] = (80, 150, 220)
     DEFAULT_RADIUS: int = 24
     DEFAULT_SHOT_COOLDOWN: float = 0.35
+    DEFAULT_PROJECTILE_VELOCITY: float = 700.0
+    DEFAULT_PROJECTILE_LIFE_TIME: float = 4.0
 
     def __init__(
         self,
@@ -57,8 +59,8 @@ class Player(Sprite):
         direction: Vector2D,
         current_time: float,
         *,
-        projectile_velocity: float = 400.0,
-        projectile_life_time: float = 2.0,
+        projectile_velocity: float = DEFAULT_PROJECTILE_VELOCITY,
+        projectile_life_time: float = DEFAULT_PROJECTILE_LIFE_TIME,
     ) -> Proyectile | None:
         """Dispara un proyectil si la cadencia lo permite."""
         if current_time < 0:
