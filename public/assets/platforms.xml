@@ -1,0 +1,8 @@
+<TextureAtlas imagePath="platforms.png">
+    <SubTexture name="mosaico01" x="0" y="0" width="427" height="177"/>
+    <SubTexture name="mosaico02" x="457" y="0" width="235" height="177"/>
+    <SubTexture name="mosaico03" x="717" y="0" width="275" height="177"/>
+    <SubTexture name="mosaico04" x="1018" y="0" width="302" height="177"/>
+    <SubTexture name="mosaico05" x="1342" y="0" width="147" height="177"/>
+    <SubTexture name="mosaico06" x="1503" y="0" width="497" height="177"/>
+</TextureAtlas>
