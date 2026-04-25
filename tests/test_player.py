@@ -12,6 +12,7 @@ from core.vector2d import Vector2D
 from entities.player import Player
 from entities.proyectile import Proyectile
 from inventory.item import Item
+from inventory.store import Store
 from stats.stats import Stats
 
 
@@ -122,6 +123,18 @@ class TestPlayerInventory(unittest.TestCase):
         self.assertEqual(p.cash, 50)
         self.assertIn(item, p.inventory.items)
 
+    def test_buy_item_exitoso_con_store_real(self) -> None:
+        p = make_player(self.screen, cash=90)
+        item = Item("Arco", buy_price=40.0, sell_price=20.0)
+        store = Store(position=Vector2D(0.0, 0.0), items=[item])
+
+        bought = p.buy_item(item, store)
+
+        self.assertTrue(bought)
+        self.assertEqual(p.cash, 50)
+        self.assertIn(item, p.inventory.items)
+        self.assertNotIn(item, store.items)
+
     def test_buy_item_sin_dinero(self) -> None:
         p = make_player(self.screen, cash=10)
         item = Item("Espada", buy_price=50.0)
@@ -141,6 +154,19 @@ class TestPlayerInventory(unittest.TestCase):
         self.assertTrue(sold)
         self.assertEqual(p.cash, 30)
         self.assertNotIn(item, p.inventory.items)
+
+    def test_sell_item_exitoso_con_store_real(self) -> None:
+        p = make_player(self.screen)
+        item = Item("Casco", buy_price=50.0, sell_price=15.0)
+        p.inventory.add_item(item)
+        store = Store(position=Vector2D(10.0, 10.0))
+
+        sold = p.sell_item(item, store)
+
+        self.assertTrue(sold)
+        self.assertEqual(p.cash, 15)
+        self.assertNotIn(item, p.inventory.items)
+        self.assertIn(item, store.items)
 
     def test_sell_item_no_en_inventario(self) -> None:
         p = make_player(self.screen)
