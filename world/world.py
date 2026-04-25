@@ -21,7 +21,7 @@ class World:
     PLATFORM_COLOR: tuple[int, int, int] = (100, 150, 100)
     GROUND_Y: float = 550.0
     PLATFORM_SPACING: int = 180
-    DEFAULT_ENEMY_COUNT: int = 6
+    DEFAULT_ENEMY_COUNT: int = 3
     DEFAULT_COLLECTIBLE_COUNT: int = 10
     PLATFORM_TOP_OFFSET: float = 30.0
     DEFAULT_SHIELD_DURATION: float = 10.0
@@ -101,6 +101,10 @@ class World:
         rng: random.Random = random.Random(seed)
         self._rng = rng
         self.place_enemies(enemy_count, rng=rng)
+        # Offset enemies to appear from the right side of the screen
+        screen_width = self.screen.get_width()
+        for point in self.enemy_spawn_points:
+            point.x += screen_width
         self.place_collectibles(collectible_count, rng=rng)
         self._instantiate_collectibles(rng)
         self._instantiate_enemies(rng)
@@ -316,10 +320,16 @@ class World:
             if collectible.is_active:
                 screen_x: float = collectible.x - camera_offset_x
                 if -50 <= screen_x <= screen_width + 50:
+                    saved_x = collectible.x
+                    collectible.position.x = screen_x
                     collectible.draw()
+                    collectible.position.x = saved_x
 
         for enemy in self.enemies:
             if not enemy.is_defeated:
                 screen_x = enemy.x - camera_offset_x
                 if -50 <= screen_x <= screen_width + 50:
+                    saved_x = enemy.x
+                    enemy.position.x = screen_x
                     enemy.draw()
+                    enemy.position.x = saved_x

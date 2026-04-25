@@ -38,7 +38,7 @@ class Proyectile(Sprite):
             x=x,
             y=y,
             color=self.DEFAULT_COLOR,
-            raius=self.DEFAULT_RADIUS,
+            radius=self.DEFAULT_RADIUS,
         )
 
         self.direction: Vector2D = direction * (1.0 / magnitude)  # normalizado

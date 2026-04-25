@@ -19,7 +19,7 @@ from world.world import World
 SCREEN_WIDTH: int = 1280
 SCREEN_HEIGHT: int = 720
 TARGET_FPS: int = 60
-BACKGROUND_COLOR: tuple[int, int, int] = (30, 30, 30)
+BACKGROUND_COLOR: tuple[int, int, int] = (135, 206, 235)
 
 
 def main() -> None:

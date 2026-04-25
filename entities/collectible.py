@@ -23,11 +23,12 @@ class Collectible(Sprite):
         radius: int = DEFAULT_RADIUS,
         life_time: float = math.inf,
         description: str = "",
+        image: str = None,
     ) -> None:
         if life_time <= 0:
             raise ValueError("life_time debe ser mayor a 0")
 
-        super().__init__(screen=screen, x=x, y=y, color=color, raius=radius)
+        super().__init__(screen=screen, x=x, y=y, color=color, radius=radius, image=image)
         self.life_time: float = float(life_time)
         self.description: str = description
         self.elapsed_time: float = 0.0

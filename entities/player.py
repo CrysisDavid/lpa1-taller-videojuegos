@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pygame
+from pathlib import Path
 
 from core.sprite import Sprite
 from core.vector2d import Vector2D
@@ -16,6 +17,7 @@ class Player(Sprite):
     DEFAULT_COLOR: tuple[int, int, int] = (80, 150, 220)
     DEFAULT_RADIUS: int = 24
     DEFAULT_SHOT_COOLDOWN: float = 0.35
+    DEFAULT_IMAGE: str = str(Path(__file__).parent.parent / "public" / "assets" / "player.gif")
     DEFAULT_PROJECTILE_VELOCITY: float = 700.0
     DEFAULT_PROJECTILE_LIFE_TIME: float = 4.0
 
@@ -39,7 +41,8 @@ class Player(Sprite):
             x=world_pos.x,
             y=world_pos.y,
             color=self.DEFAULT_COLOR,
-            raius=self.DEFAULT_RADIUS,
+            radius=self.DEFAULT_RADIUS,
+            image=self.DEFAULT_IMAGE,
         )
 
         self.name: str = name
@@ -49,6 +52,11 @@ class Player(Sprite):
         self.health: float = self.stats.max_health
         self.shot_cooldown: float = self.DEFAULT_SHOT_COOLDOWN
         self._last_shot_time: float = float("-inf")
+        self.shield_duration: float = 0.0
+        self.shield_defense_boost: float = 0.0
+        self.shield_effect_timer: float = 0.0
+        self.shield_pickup_timer: float = 0.0
+        self.treasure_pickup_timer: float = 0.0
 
     # ------------------------------------------------------------------
     # Combate
@@ -87,21 +95,102 @@ class Player(Sprite):
         if damage < 0:
             raise ValueError("damage no puede ser negativo")
 
-        total_defense: float = self.stats.defense
+        total_defense: float = self.stats.defense + self.shield_defense_boost
         for item in self.inventory.items:
             total_defense += item.defense_boost
 
         net_damage: float = max(0.0, damage - total_defense)
         self.health = max(0.0, self.health - net_damage)
 
+        if net_damage > 0:
+            self.damage_effect_timer = 0.2  # Efecto de daño por 0.2 segundos
+
         if self.health <= 0:
             self.is_active = False
 
         return net_damage
+        """Activa un escudo temporal con boost de defensa."""
+        if duration <= 0:
+            raise ValueError("duration debe ser mayor a 0")
+        if defense_boost < 0:
+            raise ValueError("defense_boost no puede ser negativo")
+        self.shield_duration = duration
+        self.shield_defense_boost = defense_boost
+        self.shield_effect_timer = 2.0  # Efecto visual por 2 segundos
 
-    # ------------------------------------------------------------------
-    # Recolección y uso de ítems
-    # ------------------------------------------------------------------
+    def update(self, delta_time: float = 0.0) -> None:
+        """Actualiza el estado del jugador, incluyendo escudos temporales."""
+        super().update(delta_time)
+        if delta_time < 0:
+            raise ValueError("delta_time no puede ser negativo")
+        if not self.is_active:
+            return
+
+        # Actualizar duración del escudo
+        if self.shield_duration > 0:
+            self.shield_duration -= delta_time
+            if self.shield_duration <= 0:
+                self.shield_defense_boost = 0.0
+
+        # Actualizar cooldown de disparo
+        if self.shot_cooldown > 0:
+            self.shot_cooldown -= delta_time
+
+        # Actualizar timers de efectos de recolección
+        if self.shield_pickup_timer > 0:
+            self.shield_pickup_timer -= delta_time
+        if self.treasure_pickup_timer > 0:
+            self.treasure_pickup_timer -= delta_time
+
+    def trigger_shield_pickup_effect(self) -> None:
+        """Activa el efecto visual de recoger un escudo."""
+        self.shield_pickup_timer = 0.5  # Efecto por 0.5 segundos
+
+    def trigger_treasure_pickup_effect(self) -> None:
+        """Activa el efecto visual de recoger un tesoro."""
+        self.treasure_pickup_timer = 0.5  # Efecto por 0.5 segundos
+
+    def draw(self) -> None:
+        """Dibuja el jugador con efectos visuales para daño, escudo y recolectables."""
+        if not self.is_active:
+            return
+
+        if self.image:
+            self.draw_image()
+            # Efectos de overlay
+            if self.shield_pickup_timer > 0:
+                overlay = pygame.Surface((self.radius * 2, self.radius * 2))
+                overlay.set_alpha(128)  # Semi-transparente
+                overlay.fill((100, 150, 255))  # Azul para recoger escudo
+                self.screen.blit(overlay, (int(self.position.x - self.radius), int(self.position.y - self.radius)))
+            elif self.treasure_pickup_timer > 0:
+                overlay = pygame.Surface((self.radius * 2, self.radius * 2))
+                overlay.set_alpha(128)  # Semi-transparente
+                overlay.fill((255, 255, 100))  # Amarillo para recoger tesoro
+                self.screen.blit(overlay, (int(self.position.x - self.radius), int(self.position.y - self.radius)))
+            elif self.shield_effect_timer > 0:
+                overlay = pygame.Surface((self.radius * 2, self.radius * 2))
+                overlay.set_alpha(128)  # Semi-transparente
+                overlay.fill((100, 150, 255))  # Azul para escudo activo
+                self.screen.blit(overlay, (int(self.position.x - self.radius), int(self.position.y - self.radius)))
+        else:
+            if self.damage_effect_timer > 0:
+                draw_color = (255, 100, 100)  # Rojo para daño
+            elif self.shield_pickup_timer > 0:
+                draw_color = (100, 150, 255)  # Azul para recoger escudo
+            elif self.treasure_pickup_timer > 0:
+                draw_color = (255, 255, 100)  # Amarillo para recoger tesoro
+            elif self.shield_effect_timer > 0:
+                draw_color = (100, 150, 255)  # Azul para escudo
+            else:
+                draw_color = self.color
+
+            pygame.draw.circle(
+                self.screen,
+                draw_color,
+                (int(self.position.x), int(self.position.y)),
+                self.radius
+            )
 
     def collect(self, collectible: object) -> None:
         """Interactúa con un coleccionable del mundo."""
