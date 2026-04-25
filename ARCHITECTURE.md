@@ -66,7 +66,8 @@ lpa1-taller-videojuegos/
 ├── inventory/
 │   ├── __init__.py
 │   ├── inventory.py             # Clase Inventory
-│   └── item.py                  # Clase Item
+│   ├── item.py                  # Clase Item
+│   └── store.py                 # Clase Store
 ├── stats/
 │   ├── __init__.py
 │   └── stats.py                 # Clase Stats (experiencia, nivel, atributos)
