@@ -213,6 +213,9 @@ class Player(Sprite):
 
     def buy_item(self, item: Item, store: object) -> bool:
         """Compra un ítem de una tienda. Retorna True si la compra fue exitosa."""
+        if hasattr(store, "buy") and callable(store.buy):
+            return bool(store.buy(item, self))
+
         if self.cash < item.buy_price:
             return False
         if self.inventory.is_full:
@@ -225,6 +228,9 @@ class Player(Sprite):
 
     def sell_item(self, item: Item, store: object) -> bool:
         """Vende un ítem a una tienda. Retorna True si la venta fue exitosa."""
+        if hasattr(store, "sell") and callable(store.sell):
+            return bool(store.sell(item, self))
+
         if not self.inventory.remove_item(item):
             return False
         self.cash += int(item.sell_price)
