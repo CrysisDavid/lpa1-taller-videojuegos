@@ -5,7 +5,7 @@ import pygame
 from core.vector2d import Vector2D
 
 class Sprite(ABC):
-    def __init__(self, screen: pygame.Surface, x:float,y:float, color: Tuple, raius: int = 40):
+    def __init__(self, screen: pygame.Surface, x:float,y:float, color: Tuple, radius: int = 40, image: str = None):
         if not isinstance(screen, pygame.Surface):
             raise TypeError("pantalla debe ser una instancia de pygame.Surface")
         if not isinstance(color, Tuple) or len(color) != 3:
@@ -14,8 +14,12 @@ class Sprite(ABC):
         self.screen = screen
         self.position = Vector2D(x,y)
         self.color = color
-        self.radius = int(raius)
+        self.radius = int(radius)
         self.is_active = True
+        self.image = image
+        self._loaded_image = None
+        self._image_path = image
+        self.damage_effect_timer: float = 0.0
         
         
         
@@ -44,19 +48,46 @@ class Sprite(ABC):
         Draws the sprite on the screen using pygame.draw.circle. The sprite is only drawn if it is active."""
         
         if self.is_active:
+            draw_color = (255, 0, 0) if self.damage_effect_timer > 0 else self.color
             pygame.draw.circle(
                 self.screen,
-                self.color,
+                draw_color,
                 (int(self.position.x), int(self.position.y)),
                 self.radius
             )
+
+    def draw_image(self):
+        """
+        Draws the sprite using an image. This method should be overridden by subclasses that use images instead of circles.
+        """
+        if not isinstance(self.image, str):
+            raise TypeError("La propiedad 'image' debe ser una cadena que representa la ruta de la imagen.")
+        if len(self.image) == 0:
+            raise TypeError("La propiedad 'image' no puede estar vacía.")
+        
+        if self._loaded_image is None or self._image_path != self.image:
+            try:
+                self._loaded_image = pygame.image.load(self.image)
+                self._loaded_image = pygame.transform.scale(self._loaded_image, (self.radius * 2, self.radius * 2))
+                self._image_path = self.image
+            except pygame.error as e:
+                raise ValueError(f"No se pudo cargar la imagen: {self.image}. Error: {e}")
+        self.screen.blit(self._loaded_image, (int(self.position.x - self.radius), int(self.position.y - self.radius)))
+        
+        # Efecto de daño: overlay rojo si está activo
+        if self.damage_effect_timer > 0:
+            overlay = pygame.Surface((self.radius * 2, self.radius * 2))
+            overlay.set_alpha(128)  # Semi-transparente
+            overlay.fill((255, 0, 0))  # Rojo
+            self.screen.blit(overlay, (int(self.position.x - self.radius), int(self.position.y - self.radius)))
         
     
-    def update():
+    def update(self, delta_time: float = 0.0):
         """
         Update the state of the sprite. This method should be overridden by subclasses to implement specific behavior.
         """
-        pass
+        if self.damage_effect_timer > 0:
+            self.damage_effect_timer -= delta_time
     
     @property
     def y(self):

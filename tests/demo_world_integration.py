@@ -18,6 +18,7 @@ from entities.player import Player
 from entities.proyectile import Proyectile
 from entities.trap import Trap
 from entities.treasure import Treasure
+from generate_enemies import generate_enemies_from_image
 from stats.stats import Stats
 from world.world import World
 
@@ -25,7 +26,7 @@ from world.world import World
 SCREEN_WIDTH: int = 1280
 SCREEN_HEIGHT: int = 720
 TARGET_FPS: int = 60
-BACKGROUND_COLOR: tuple[int, int, int] = (20, 20, 30)
+BACKGROUND_COLOR: tuple[int, int, int] = (135, 206, 235)
 UI_COLOR: tuple[int, int, int] = (200, 200, 200)
 UI_BG_COLOR: tuple[int, int, int] = (40, 40, 50)
 
@@ -72,6 +73,10 @@ def main() -> None:
     )
     pygame.display.set_caption("Demo - Mundo con Player, Collectibles y Enemigos")
 
+    # Cargar imagen de game over
+    game_over_image = pygame.image.load("public/assets/game-over.png")
+    game_over_image = pygame.transform.scale(game_over_image, (400, 300))  # Ajustar tamaño
+
     clock: pygame.time.Clock = pygame.time.Clock()
     is_running: bool = True
 
@@ -84,6 +89,10 @@ def main() -> None:
     player_facing: Vector2D = Vector2D(1.0, 0.0)
     projectiles: list[Proyectile] = []
     messages: list[tuple[str, float]] = []  # (texto, tiempo_restante)
+    game_over: bool = False
+
+    # Generar enemigos usando la imagen
+    world.enemies = generate_enemies_from_image(screen, world.enemy_spawn_points)
 
     # Variables para visualización
     frame_count: int = 0
@@ -102,12 +111,29 @@ def main() -> None:
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     is_running = False
-                elif event.key == pygame.K_SPACE:
+                elif event.key == pygame.K_SPACE and game_over:
+                    # Reiniciar
                     world.generate(
                         seed=frame_count,
                         collectible_count=12,
-                        enemy_count=6,
+                        enemy_count=3,
                     )
+                    world.enemies = generate_enemies_from_image(screen, world.enemy_spawn_points)
+                    player = create_player(screen)
+                    player_vy = 0.0
+                    on_ground = True
+                    player_facing = Vector2D(1.0, 0.0)
+                    projectiles.clear()
+                    messages.clear()
+                    game_over = False
+                elif event.key == pygame.K_SPACE and not game_over:
+                    world.generate(
+                        seed=frame_count,
+                        collectible_count=12,
+                        enemy_count=3,
+                    )
+                    # Generar enemigos usando la imagen
+                    world.enemies = generate_enemies_from_image(screen, world.enemy_spawn_points)
                     player = create_player(screen)
                     player_vy = 0.0
                     on_ground = True
@@ -125,90 +151,104 @@ def main() -> None:
                     else:
                         messages.append(("Cadencia activa: espera para disparar", 0.7))
 
-        # Movimiento horizontal
-        keys = pygame.key.get_pressed()
-        dx: float = 0.0
-        if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-            dx -= PLAYER_SPEED * delta_time
-        if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-            dx += PLAYER_SPEED * delta_time
-        player.position.x += dx
+        if not game_over:
+            # Movimiento horizontal
+            keys = pygame.key.get_pressed()
+            dx: float = 0.0
+            if keys[pygame.K_LEFT] or keys[pygame.K_a]:
+                dx -= PLAYER_SPEED * delta_time
+            if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
+                dx += PLAYER_SPEED * delta_time
+            player.position.x += dx
 
-        # Mantiene al player dentro de la ventana visible actual de la cámara.
-        viewport_left_world = world.camera.offset.x + player.radius
-        viewport_right_world = world.camera.offset.x + SCREEN_WIDTH - player.radius
-        if player.position.x < viewport_left_world:
-            player.position.x = viewport_left_world
-        elif player.position.x > viewport_right_world:
-            player.position.x = viewport_right_world
+            # Mantiene al player dentro de la ventana visible actual de la cámara.
+            viewport_left_world = world.camera.offset.x + player.radius
+            viewport_right_world = world.camera.offset.x + SCREEN_WIDTH - player.radius
+            if player.position.x < viewport_left_world:
+                player.position.x = viewport_left_world
+            elif player.position.x > viewport_right_world:
+                player.position.x = viewport_right_world
 
-        if dx < 0:
-            player_facing = Vector2D(-1.0, 0.0)
-        elif dx > 0:
-            player_facing = Vector2D(1.0, 0.0)
+            if dx < 0:
+                player_facing = Vector2D(-1.0, 0.0)
+            elif dx > 0:
+                player_facing = Vector2D(1.0, 0.0)
 
-        # Gravedad y salto
-        player_vy += GRAVITY * delta_time
-        player.position.y += player_vy * delta_time
-        if player.position.y >= GROUND_Y:
-            player.position.y = GROUND_Y
-            player_vy = 0.0
-            on_ground = True
+            # Gravedad y salto
+            player_vy += GRAVITY * delta_time
+            player.position.y += player_vy * delta_time
+            if player.position.y >= GROUND_Y:
+                player.position.y = GROUND_Y
+                player_vy = 0.0
+                on_ground = True
 
-        # Colisión con collectibles
-        for collectible in world.collectibles:
-            if collectible.is_active and player.colission(collectible):
-                if isinstance(collectible, Shield):
-                    result = collectible.activate()
-                    boost = result.get("defense_boost", 0.0)
-                    player.stats.defense += boost
-                    messages.append((f"+{boost:.0f} DEF (Escudo)", 2.0))
-                elif isinstance(collectible, Treasure):
-                    value = collectible.collect_value()
-                    player.cash += int(value)
-                    messages.append((f"+${value:.0f} (Tesoro)", 2.0))
-                elif isinstance(collectible, Trap):
-                    dmg = collectible.explode(player.position)
-                    net = player.defend(dmg)
-                    messages.append((f"-{net:.0f} HP (Trampa)", 2.0))
-                collectible.is_active = False
+            # Colisión con collectibles
+            for collectible in world.collectibles:
+                if collectible.is_active:
+                    if isinstance(collectible, Treasure):
+                        # Recolectar tesoro si está cerca del jugador
+                        distance = player.position.distance_to(collectible.position)
+                        if distance < 50.0:
+                            value = collectible.collect_value()
+                            player.cash += int(value)
+                            player.trigger_treasure_pickup_effect()  # Efecto visual amarillo
+                            messages.append((f"+${value:.0f} (Tesoro)", 2.0))
+                            collectible.is_active = False
+                    elif player.colission(collectible):
+                        if isinstance(collectible, Shield):
+                            result = collectible.activate()
+                            boost = result.get("defense_boost", 0.0)
+                            player.stats.defense += boost
+                            player.trigger_shield_pickup_effect()  # Efecto visual azul
+                            messages.append((f"+{boost:.0f} DEF (Escudo)", 2.0))
+                        elif isinstance(collectible, Trap):
+                            dmg = collectible.explode(player.position)
+                            net = player.defend(dmg)
+                            messages.append((f"-{net:.0f} HP (Trampa)", 2.0))
+                        collectible.is_active = False
 
-        # Colisión con enemigos
-        for enemy in world.enemies:
-            if not enemy.is_defeated and player.colission(enemy):
-                dmg = enemy.attack(player)
-                if dmg > 0:
-                    messages.append((f"-{dmg:.0f} HP (Enemigo)", 1.5))
-
-        # Actualizar proyectiles y resolver impactos con enemigos
-        for projectile in projectiles:
-            if not projectile.is_active:
-                continue
-            projectile.update(delta_time)
+            # Colisión con enemigos (ataque por proximidad)
             for enemy in world.enemies:
-                if enemy.is_defeated:
+                if not enemy.is_defeated and enemy.attack_cooldown <= 0:
+                    distance = player.position.distance_to(enemy.position)
+                    if distance < 100.0:  # Distancia de ataque
+                        dmg = enemy.attack(player)
+                        if dmg > 0:
+                            messages.append((f"-{dmg:.0f} HP (Enemigo cercano)", 1.5))
+                        enemy.attack_cooldown = 1.0  # Cooldown de 1 segundo entre ataques
+
+            # Actualizar proyectiles y resolver impactos con enemigos
+            for projectile in projectiles:
+                if not projectile.is_active:
                     continue
-                hit_damage = projectile.hit(enemy)
-                if hit_damage > 0:
-                    messages.append((f"-{hit_damage:.0f} HP al enemigo", 1.0))
+                projectile.update(delta_time)
+                for enemy in world.enemies:
                     if enemy.is_defeated:
-                        gained_levels = player.gain_experience(25.0)
-                        if gained_levels > 0:
-                            player.health = player.stats.max_health
-                            messages.append((f"LEVEL UP x{gained_levels}!", 1.5))
-                        else:
-                            messages.append(("+25 XP", 1.0))
-                    break
+                        continue
+                    hit_damage = projectile.hit(enemy)
+                    if hit_damage > 0:
+                        messages.append((f"-{hit_damage:.0f} HP al enemigo", 1.0))
+                        if enemy.is_defeated:
+                            gained_levels = player.gain_experience(25.0)
+                            if gained_levels > 0:
+                                player.health = player.stats.max_health
+                                messages.append((f"LEVEL UP x{gained_levels}!", 1.5))
+                            else:
+                                messages.append(("+25 XP", 1.0))
 
-        # Limpiar proyectiles inactivos
-        projectiles = [p for p in projectiles if p.is_active]
+            # Limpiar proyectiles inactivos
+            projectiles = [p for p in projectiles if p.is_active]
 
-        # Expirar mensajes
-        messages = [(txt, t - delta_time) for txt, t in messages if t > 0]
+            # Expirar mensajes
+            messages = [(txt, t - delta_time) for txt, t in messages if t > 0]
 
-        # Actualizar mundo
-        world.update(delta_time)
+            # Actualizar mundo
+            world.update(delta_time)
+            player.update(delta_time)
 
+            # Verificar game over
+            if not player.is_active and not game_over:
+                game_over = True
         # Renderizar
         screen.fill(BACKGROUND_COLOR)
 
@@ -375,6 +415,14 @@ def main() -> None:
             font_small, visible_info, (150, 200, 150), UI_BG_COLOR
         )
         screen.blit(visible_surface, (SCREEN_WIDTH - 120, 60))
+
+        # Mostrar game over si es necesario
+        if game_over:
+            image_rect = game_over_image.get_rect(center=(SCREEN_WIDTH // 2, SCREEN_HEIGHT // 2))
+            screen.blit(game_over_image, image_rect)
+            # Mensaje para reiniciar
+            restart_text = render_text_with_background(font_medium, "Presiona ESPACIO para reiniciar", (255, 255, 255), (0, 0, 0))
+            screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, SCREEN_HEIGHT // 2 + 150))
 
         pygame.display.flip()
 

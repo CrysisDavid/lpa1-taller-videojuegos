@@ -1,4 +1,5 @@
 import pygame
+from pathlib import Path
 
 from entities.collectible import Collectible
 
@@ -7,6 +8,7 @@ class Shield(Collectible):
     """Ítem defensivo recolectable que otorga protección temporal."""
 
     DEFAULT_COLOR: tuple[int, int, int] = (80, 170, 240)
+    DEFAULT_IMAGE: str = str(Path(__file__).parent.parent / "public" / "assets" / "escudo.png")
 
     def __init__(
         self,
@@ -30,13 +32,21 @@ class Shield(Collectible):
             color=self.DEFAULT_COLOR,
             life_time=duration,
             description=description,
+            image=self.DEFAULT_IMAGE,
         )
         self.duration: float = duration
         self.defense_boost: float = defense_boost
 
+    def draw(self) -> None:
+        """Dibuja el escudo usando imagen si está disponible, sino círculo."""
+        if self.is_active:
+            if self.image:
+                self.draw_image()
+            else:
+                super().draw()
+
     def activate(self) -> dict[str, float]:
         """Activa el escudo y retorna sus efectos para el jugador."""
-        self.collect()
         return {
             "duration": self.duration,
             "defense_boost": self.defense_boost,
