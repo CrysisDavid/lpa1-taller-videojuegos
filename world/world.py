@@ -1,5 +1,6 @@
 import random
 from typing import List
+import os
 
 import pygame
 
@@ -8,6 +9,7 @@ from core.vector2d import Vector2D
 from entities.enemy import Enemy
 from entities.trap import Trap
 from entities.treasure import Treasure
+from utils.spriteSheet import SpriteSheet
 from world.camera import Camera
 from world.platform import Platform
 
@@ -17,7 +19,7 @@ class World:
 
     CAMERA_SCROLL_SPEED: float = 200.0
     PLATFORM_WIDTH: int = 120
-    PLATFORM_HEIGHT: int = 20
+    PLATFORM_HEIGHT: int = 80
     PLATFORM_COLOR: tuple[int, int, int] = (100, 150, 100)
     GROUND_Y: float = 550.0
     PLATFORM_SPACING: int = 180
@@ -46,6 +48,15 @@ class World:
         self.collectibles: List[Shield | Trap | Treasure] = []
         self.enemies: List[Enemy] = []
         self._rng: random.Random = random.Random()
+        
+        # Inicializa SpriteSheet para plataformas
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        image_path = os.path.join(project_root, "public", "assets", "platforms.png")
+        xml_path = os.path.join(project_root, "public", "assets", "platforms.xml")
+        self.spritesheet: SpriteSheet | None = None
+        if os.path.exists(image_path) and os.path.exists(xml_path):
+            self.spritesheet = SpriteSheet(image_path, xml_path)
+        
         self._initialize_platforms()
 
     def _initialize_platforms(self) -> None:
@@ -56,15 +67,31 @@ class World:
 
         current_x: float = 0.0
         while current_x < max_x:
+            sprite_image = self._get_random_platform_sprite()
             platform: Platform = Platform(
                 world_x=current_x,
                 world_y=self.GROUND_Y,
                 width=self.PLATFORM_WIDTH,
                 height=self.PLATFORM_HEIGHT,
                 color=self.PLATFORM_COLOR,
+                sprite_image=sprite_image,
             )
             self.platforms.append(platform)
             current_x += self.PLATFORM_SPACING
+
+    def _get_random_platform_sprite(self) -> pygame.Surface | None:
+        """Obtiene un sprite de plataforma aleatorio del SpriteSheet."""
+        if self.spritesheet is None:
+            return None
+        
+        # Obtiene todos los sprites disponibles
+        frames = self.spritesheet.get_all()
+        if not frames:
+            return None
+        
+        # Selecciona uno aleatorio
+        random_sprite_name = self._rng.choice(list(frames.keys()))
+        return frames[random_sprite_name]
 
     def add_platform(self, platform: Platform) -> None:
         """
@@ -288,12 +315,14 @@ class World:
         # Si el borde derecho visible se acerca al final de las plataformas
         if camera_right_edge > furthest_x - screen_width:
             next_x: float = furthest_x + self.PLATFORM_SPACING
+            sprite_image = self._get_random_platform_sprite()
             new_platform: Platform = Platform(
                 world_x=next_x,
                 world_y=self.GROUND_Y,
                 width=self.PLATFORM_WIDTH,
                 height=self.PLATFORM_HEIGHT,
                 color=self.PLATFORM_COLOR,
+                sprite_image=sprite_image,
             )
             self.platforms.append(new_platform)
             self._spawn_entities_for_platform(new_platform)
