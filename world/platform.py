@@ -15,6 +15,7 @@ class Platform:
         width: int,
         height: int,
         color: tuple[int, int, int] = (100, 100, 100),
+        sprite_image: pygame.Surface | None = None,
     ) -> None:
         """
         Inicializa una plataforma en el mundo.
@@ -24,12 +25,14 @@ class Platform:
             world_y (float): Posición Y en coordenadas del mundo.
             width (int): Ancho de la plataforma en píxeles.
             height (int): Alto de la plataforma en píxeles.
-            color (tuple[int, int, int]): Color RGB de la plataforma.
+            color (tuple[int, int, int]): Color RGB de la plataforma (fallback si no hay sprite).
+            sprite_image (pygame.Surface | None): Imagen del sprite para renderizar.
         """
         self.position: Vector2D = Vector2D(world_x, world_y)
         self.width: int = width
         self.height: int = height
         self.color: tuple[int, int, int] = color
+        self.sprite_image: pygame.Surface | None = sprite_image
         self.is_active: bool = True
 
     @property
@@ -66,7 +69,14 @@ class Platform:
             self.width,
             self.height,
         )
-        pygame.draw.rect(surface, self.color, screen_rect)
+        
+        if self.sprite_image is not None:
+            # Renderiza el sprite escalado al tamaño de la plataforma
+            scaled_sprite = pygame.transform.scale(self.sprite_image, (self.width, self.height))
+            surface.blit(scaled_sprite, (int(screen_x), int(self.y)))
+        else:
+            # Fallback: renderiza rectángulo si no hay sprite
+            pygame.draw.rect(surface, self.color, screen_rect)
 
     def is_on_screen(self, screen_width: int, camera_offset_x: float) -> bool:
         """
