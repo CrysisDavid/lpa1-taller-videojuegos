@@ -34,42 +34,59 @@ El proyecto sigue un diseño orientado a objetos con responsabilidades claras po
 ## 2. Estructura del Proyecto
 
 ```
-videojuego/
-├── main.py                  # Punto de entrada: instancia GameManager y llama exec()
-├── ARCHITECTURE.md          # Este archivo — fuente de verdad
-├── README.md                # Requerimientos del taller
-├── WORLD_MECHANICS.md       # Diseño de mecánicas del mundo
-├── WORLD_README.md          # Documentación del módulo world
-├── requirements.txt         # Dependencias de Python
+lpa1-taller-videojuegos/
+├── main.py                      # Punto de entrada principal
+├── generate_enemies.py          # Script para generar enemigos dinámicamente
+├── ARCHITECTURE.md              # Este archivo — fuente de verdad
+├── README.md                    # Requerimientos del taller
+├── WORLD_MECHANICS.md           # Diseño de mecánicas del mundo
+├── WORLD_README.md              # Documentación del módulo world
+├── requirements.txt             # Dependencias de Python
 ├── core/
 │   ├── __init__.py
-│   ├── vector2d.py          # Clase Vector2D (matemáticas 2D)
-│   └── sprite.py            # Clase base Sprite
+│   ├── sprite.py                # Clase base Sprite (ABC)
+│   └── vector2d.py              # Clase Vector2D (matemáticas 2D)
 ├── entities/
 │   ├── __init__.py
-│   ├── collectible.py        # Clase base Collectible
-│   ├── trap.py               # Clase Trap
-│   └── treasure.py           # Clase Treasure
+│   ├── collectible.py           # Clase base Collectible
+│   ├── enemy.py                 # Clase Enemy
+│   ├── player.py                # Clase Player
+│   ├── proyectile.py            # Clase Proyectile
+│   ├── shield.py                # Clase Shield
+│   ├── trap.py                  # Clase Trap
+│   └── treasure.py              # Clase Treasure
 ├── combat/
 │   ├── __init__.py
-│   └── shield.py             # Clase Shield
+│   └── shield.py                # Clase Shield (componente defensivo)
 ├── world/
 │   ├── __init__.py
-│   ├── world.py             # Clase World
-│   ├── platform.py          # Clase Platform
-│   └── camera.py            # Clase Camera
+│   ├── camera.py                # Clase Camera (viewport)
+│   ├── platform.py              # Clase Platform (plataforma renderizable)
+│   └── world.py                 # Clase World (generación y gestión del nivel)
 ├── inventory/
-│   └── __init__.py
-└── stats/
-    └── __init__.py
-
-tests/
-├── test_world_mechanics.py  # Pruebas del módulo de mundo
-└── demo_world_integration.py # Demo visual de integración World + Collectibles
-
-docs/
-├── classDiagram.mmd         # Fuente Mermaid del diagrama de clases
-└── diagrama_clases.md       # Diagrama de clases en Markdown + Mermaid
+│   ├── __init__.py
+│   ├── inventory.py             # Clase Inventory
+│   └── item.py                  # Clase Item
+├── stats/
+│   ├── __init__.py
+│   └── stats.py                 # Clase Stats (experiencia, nivel, atributos)
+├── utils/
+│   └── spriteSheet.py           # Clase SpriteSheet (carga de sprites desde XML)
+├── public/
+│   └── assets/
+│       ├── platforms.png        # Sprite sheet de plataformas (1600×177px)
+│       └── platforms.xml        # Descripción de frames con mosaicos
+├── docs/
+│   ├── classDiagram.mmd         # Fuente Mermaid del diagrama de clases
+│   └── diagrama_clases.md       # Diagrama de clases en Markdown
+└── tests/
+    ├── demo_world_integration.py    # Demo visual: World + Entities + Controles
+    ├── test_enemy.py                # Tests para clase Enemy
+    ├── test_player.py               # Tests para clase Player
+    ├── test_proyectile.py           # Tests para clase Proyectile
+    ├── test_stats.py                # Tests para clase Stats
+    ├── test_world_enemy_integration.py  # Integración World + Enemy
+    └── test_world_mechanics.py      # Tests para mecánicas de mundo
 ```
 
 **Regla:** un archivo = una clase principal. No agrupar clases no relacionadas en el mismo módulo.
