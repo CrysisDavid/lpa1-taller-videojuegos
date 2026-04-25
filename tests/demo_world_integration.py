@@ -1,7 +1,7 @@
 """
 Demo visual de integración del mundo con Player, collectibles y enemigos.
 Controles: flechas/WASD para mover, W/arriba para saltar, F para disparar,
-ESPACIO para regenerar y ESC para salir.
+ESPACIO para regenerar, E para abrir tienda y ESC para salir.
 """
 
 import sys
@@ -19,6 +19,8 @@ from entities.proyectile import Proyectile
 from entities.trap import Trap
 from entities.treasure import Treasure
 from generate_enemies import generate_enemies_from_image
+from inventory.item import Item
+from inventory.store import Store
 from stats.stats import Stats
 from world.world import World
 
@@ -29,6 +31,9 @@ TARGET_FPS: int = 60
 BACKGROUND_COLOR: tuple[int, int, int] = (135, 206, 235)
 UI_COLOR: tuple[int, int, int] = (200, 200, 200)
 UI_BG_COLOR: tuple[int, int, int] = (40, 40, 50)
+STORE_COLOR: tuple[int, int, int] = (225, 170, 60)
+STORE_ACTIVE_COLOR: tuple[int, int, int] = (90, 220, 120)
+STORE_INTERACTION_RANGE: float = 120.0
 
 
 def render_text_with_background(
@@ -65,6 +70,166 @@ def create_player(screen: pygame.Surface) -> Player:
     )
 
 
+def create_store() -> Store:
+    """Crea una tienda con inventario inicial para la demo."""
+    starter_items: list[Item] = [
+        Item(
+            "Elixir Vital",
+            description="Recupera vida al usarse.",
+            buy_price=45.0,
+            sell_price=22.0,
+            damage=35.0,
+        ),
+        Item(
+            "Pocion de Furia",
+            description="Aumenta el dano de ataque.",
+            buy_price=50.0,
+            sell_price=25.0,
+            attack_boost=6.0,
+        ),
+        Item(
+            "Escudo Reforzado",
+            description="Aumenta defensa base.",
+            buy_price=38.0,
+            sell_price=19.0,
+            defense_boost=4.0,
+        ),
+    ]
+    return Store(position=Vector2D(560.0, GROUND_Y), items=starter_items)
+
+
+def describe_item_effect(item: Item) -> str:
+    """Retorna un texto corto con el efecto principal de un item."""
+    effect_parts: list[str] = []
+    if item.damage > 0:
+        effect_parts.append(f"cura +{int(item.damage)}")
+    if item.attack_boost > 0:
+        effect_parts.append(f"ATK +{int(item.attack_boost)}")
+    if item.defense_boost > 0:
+        effect_parts.append(f"DEF +{int(item.defense_boost)}")
+    return ", ".join(effect_parts) if effect_parts else "sin efecto"
+
+
+def buy_selected_item(player: Player, store: Store, selected_index: int) -> tuple[str, int]:
+    """Intenta comprar el item seleccionado de la tienda."""
+    if not store.items:
+        return "Tienda sin stock", 0
+
+    clamped_index: int = max(0, min(selected_index, len(store.items) - 1))
+    item: Item = store.items[clamped_index]
+    if player.buy_item(item, store):
+        if store.items:
+            clamped_index = min(clamped_index, len(store.items) - 1)
+        else:
+            clamped_index = 0
+        return f"Compraste {item.name} (-${int(item.buy_price)})", clamped_index
+
+    if player.inventory.is_full:
+        return "Inventario lleno", clamped_index
+    if player.cash < item.buy_price:
+        return f"No alcanza para {item.name}", clamped_index
+    return "No se pudo realizar la compra", clamped_index
+
+
+def sell_selected_item(player: Player, store: Store, selected_index: int) -> tuple[str, int]:
+    """Intenta vender el item seleccionado del inventario."""
+    if not player.inventory.items:
+        return "No tienes items para vender", 0
+
+    clamped_index: int = max(0, min(selected_index, len(player.inventory.items) - 1))
+    item: Item = player.inventory.items[clamped_index]
+    if player.sell_item(item, store):
+        if player.inventory.items:
+            clamped_index = min(clamped_index, len(player.inventory.items) - 1)
+        else:
+            clamped_index = 0
+        return f"Vendiste {item.name} (+${int(item.sell_price)})", clamped_index
+
+    return "No se pudo realizar la venta", clamped_index
+
+
+def draw_store_dialog(
+    screen: pygame.Surface,
+    font_small: pygame.font.Font,
+    font_medium: pygame.font.Font,
+    store: Store,
+    player: Player,
+    active_tab: str,
+    buy_index: int,
+    sell_index: int,
+) -> None:
+    """Dibuja un cuadro de dialogo de tienda con seleccion de compra/venta."""
+    overlay = pygame.Surface((SCREEN_WIDTH, SCREEN_HEIGHT), pygame.SRCALPHA)
+    overlay.fill((0, 0, 0, 140))
+    screen.blit(overlay, (0, 0))
+
+    panel_width: int = 860
+    panel_height: int = 470
+    panel_x: int = (SCREEN_WIDTH - panel_width) // 2
+    panel_y: int = (SCREEN_HEIGHT - panel_height) // 2
+    panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
+    pygame.draw.rect(screen, (26, 31, 45), panel_rect, border_radius=12)
+    pygame.draw.rect(screen, (220, 180, 90), panel_rect, width=2, border_radius=12)
+
+    title = render_text_with_background(
+        font_medium,
+        "TIENDA - Elige que comprar o vender",
+        (255, 230, 140),
+        (26, 31, 45),
+    )
+    screen.blit(title, (panel_x + 20, panel_y + 14))
+
+    cash_text = render_text_with_background(
+        font_small,
+        f"Dinero: ${player.cash}",
+        (240, 210, 120),
+        (26, 31, 45),
+    )
+    screen.blit(cash_text, (panel_x + panel_width - cash_text.get_width() - 20, panel_y + 14))
+
+    buy_header_color = (120, 240, 150) if active_tab == "buy" else (170, 170, 170)
+    sell_header_color = (120, 240, 150) if active_tab == "sell" else (170, 170, 170)
+    buy_header = render_text_with_background(font_medium, "COMPRA", buy_header_color, (26, 31, 45))
+    sell_header = render_text_with_background(font_medium, "VENTA", sell_header_color, (26, 31, 45))
+    screen.blit(buy_header, (panel_x + 26, panel_y + 56))
+    screen.blit(sell_header, (panel_x + panel_width // 2 + 20, panel_y + 56))
+
+    buy_items = store.items[:10]
+    sell_items = player.inventory.items[:10]
+
+    buy_start_y: int = panel_y + 92
+    for idx, item in enumerate(buy_items):
+        selected: bool = active_tab == "buy" and idx == buy_index
+        prefix: str = "> " if selected else "  "
+        color = (255, 245, 200) if selected else (210, 210, 210)
+        line = f"{prefix}{item.name}  ${int(item.buy_price)}  ({describe_item_effect(item)})"
+        line_surface = render_text_with_background(font_small, line, color, (38, 44, 60))
+        screen.blit(line_surface, (panel_x + 18, buy_start_y + idx * 30))
+    if not buy_items:
+        line_surface = render_text_with_background(font_small, "Sin stock disponible", (210, 140, 140), (38, 44, 60))
+        screen.blit(line_surface, (panel_x + 18, buy_start_y))
+
+    sell_start_y: int = panel_y + 92
+    for idx, item in enumerate(sell_items):
+        selected = active_tab == "sell" and idx == sell_index
+        prefix = "> " if selected else "  "
+        color = (255, 245, 200) if selected else (210, 210, 210)
+        line = f"{prefix}{item.name}  +${int(item.sell_price)}  ({describe_item_effect(item)})"
+        line_surface = render_text_with_background(font_small, line, color, (38, 44, 60))
+        screen.blit(line_surface, (panel_x + panel_width // 2 + 12, sell_start_y + idx * 30))
+    if not sell_items:
+        line_surface = render_text_with_background(font_small, "Inventario vacio", (210, 140, 140), (38, 44, 60))
+        screen.blit(line_surface, (panel_x + panel_width // 2 + 12, sell_start_y))
+
+    help_text = render_text_with_background(
+        font_small,
+        "TAB cambia panel | Arriba/Abajo seleccionan | ENTER confirma | ESC o E cierra",
+        (170, 200, 255),
+        (26, 31, 45),
+    )
+    screen.blit(help_text, (panel_x + 20, panel_y + panel_height - 38))
+
+
 def main() -> None:
     """Ejecuta la demo visual de integración mundo-player-collectibles."""
     pygame.init()
@@ -84,12 +249,17 @@ def main() -> None:
     world: World = World(screen=screen)
     world.generate(seed=2026, collectible_count=12, enemy_count=6)
     player: Player = create_player(screen)
+    store: Store = create_store()
     player_vy: float = 0.0  # velocidad vertical para gravedad
     on_ground: bool = True
     player_facing: Vector2D = Vector2D(1.0, 0.0)
     projectiles: list[Proyectile] = []
     messages: list[tuple[str, float]] = []  # (texto, tiempo_restante)
     game_over: bool = False
+    store_dialog_open: bool = False
+    store_dialog_tab: str = "buy"
+    store_buy_index: int = 0
+    store_sell_index: int = 0
 
     # Generar enemigos usando la imagen
     world.enemies = generate_enemies_from_image(screen, world.enemy_spawn_points)
@@ -103,6 +273,17 @@ def main() -> None:
     while is_running:
         delta_time: float = clock.tick(TARGET_FPS) / 1000.0
         frame_count += 1
+        is_near_store: bool = (
+            player.position.distance_to(store.position) <= STORE_INTERACTION_RANGE
+        )
+        if store.items:
+            store_buy_index = max(0, min(store_buy_index, len(store.items) - 1))
+        else:
+            store_buy_index = 0
+        if player.inventory.items:
+            store_sell_index = max(0, min(store_sell_index, len(player.inventory.items) - 1))
+        else:
+            store_sell_index = 0
 
         # Manejo de eventos
         for event in pygame.event.get():
@@ -110,7 +291,39 @@ def main() -> None:
                 is_running = False
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    is_running = False
+                    if store_dialog_open:
+                        store_dialog_open = False
+                    else:
+                        is_running = False
+                elif event.key == pygame.K_e and not game_over:
+                    if not is_near_store:
+                        messages.append(("Acercate a la tienda para abrir dialogo", 1.2))
+                    else:
+                        store_dialog_open = not store_dialog_open
+                        if store_dialog_open:
+                            store_dialog_tab = "buy"
+                            store_buy_index = 0
+                            store_sell_index = 0
+                elif store_dialog_open:
+                    if event.key in (pygame.K_TAB, pygame.K_LEFT, pygame.K_RIGHT):
+                        store_dialog_tab = "sell" if store_dialog_tab == "buy" else "buy"
+                    elif event.key in (pygame.K_UP, pygame.K_w):
+                        if store_dialog_tab == "buy" and store.items:
+                            store_buy_index = (store_buy_index - 1) % len(store.items)
+                        elif store_dialog_tab == "sell" and player.inventory.items:
+                            store_sell_index = (store_sell_index - 1) % len(player.inventory.items)
+                    elif event.key in (pygame.K_DOWN, pygame.K_s):
+                        if store_dialog_tab == "buy" and store.items:
+                            store_buy_index = (store_buy_index + 1) % len(store.items)
+                        elif store_dialog_tab == "sell" and player.inventory.items:
+                            store_sell_index = (store_sell_index + 1) % len(player.inventory.items)
+                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        if store_dialog_tab == "buy":
+                            result_text, store_buy_index = buy_selected_item(player, store, store_buy_index)
+                            messages.append((result_text, 1.4))
+                        else:
+                            result_text, store_sell_index = sell_selected_item(player, store, store_sell_index)
+                            messages.append((result_text, 1.4))
                 elif event.key == pygame.K_SPACE and game_over:
                     # Reiniciar
                     world.generate(
@@ -120,12 +333,17 @@ def main() -> None:
                     )
                     world.enemies = generate_enemies_from_image(screen, world.enemy_spawn_points)
                     player = create_player(screen)
+                    store = create_store()
                     player_vy = 0.0
                     on_ground = True
                     player_facing = Vector2D(1.0, 0.0)
                     projectiles.clear()
                     messages.clear()
                     game_over = False
+                    store_dialog_open = False
+                    store_dialog_tab = "buy"
+                    store_buy_index = 0
+                    store_sell_index = 0
                 elif event.key == pygame.K_SPACE and not game_over:
                     world.generate(
                         seed=frame_count,
@@ -135,15 +353,20 @@ def main() -> None:
                     # Generar enemigos usando la imagen
                     world.enemies = generate_enemies_from_image(screen, world.enemy_spawn_points)
                     player = create_player(screen)
+                    store = create_store()
                     player_vy = 0.0
                     on_ground = True
                     player_facing = Vector2D(1.0, 0.0)
                     projectiles.clear()
                     messages.clear()
-                elif event.key in (pygame.K_UP, pygame.K_w) and on_ground:
+                    store_dialog_open = False
+                    store_dialog_tab = "buy"
+                    store_buy_index = 0
+                    store_sell_index = 0
+                elif event.key in (pygame.K_UP, pygame.K_w) and on_ground and not store_dialog_open:
                     player_vy = JUMP_FORCE
                     on_ground = False
-                elif event.key == pygame.K_f:
+                elif event.key == pygame.K_f and not store_dialog_open:
                     now_seconds: float = pygame.time.get_ticks() / 1000.0
                     projectile = player.shoot(player_facing, current_time=now_seconds)
                     if projectile is not None:
@@ -254,6 +477,24 @@ def main() -> None:
 
         # Dibujar mundo (plataformas, collectibles y enemigos)
         world.draw(surface=screen, camera_offset_x=world.camera.offset.x)
+
+        # Dibujar tienda con offset de camara
+        store_screen_x: int = int(store.position.x - world.camera.offset.x)
+        store_screen_y: int = int(store.position.y)
+        store_rect = pygame.Rect(store_screen_x - 26, store_screen_y - 72, 52, 72)
+        store_color = STORE_ACTIVE_COLOR if is_near_store else STORE_COLOR
+        pygame.draw.rect(screen, store_color, store_rect, border_radius=8)
+        pygame.draw.rect(screen, (20, 20, 20), store_rect, width=2, border_radius=8)
+        sign_surface = font_small.render("STORE", True, (20, 20, 20))
+        screen.blit(sign_surface, (store_screen_x - sign_surface.get_width() // 2, store_screen_y - 92))
+        if is_near_store:
+            pygame.draw.circle(
+                screen,
+                (120, 255, 160),
+                (store_screen_x, store_screen_y - 36),
+                int(STORE_INTERACTION_RANGE * 0.35),
+                width=2,
+            )
 
         # Dibujar player con offset de cámara
         saved_x = player.position.x
@@ -375,8 +616,39 @@ def main() -> None:
         screen.blit(projectile_surface, (info_x, info_y))
         info_y += 22
 
+        # Estado de tienda
+        store_state_text = "TIENDA: EN RANGO" if is_near_store else "Tienda: fuera de rango"
+        store_state_color = (100, 255, 140) if is_near_store else (200, 180, 120)
+        screen.blit(
+            render_text_with_background(font_small, store_state_text, store_state_color, UI_BG_COLOR),
+            (info_x, info_y),
+        )
+        info_y += 20
+
+        next_item_text = (
+            f"Siguiente compra: {store.items[0].name} (${int(store.items[0].buy_price)})"
+            if store.items
+            else "Siguiente compra: sin stock"
+        )
+        screen.blit(
+            render_text_with_background(font_small, next_item_text, (245, 210, 100), UI_BG_COLOR),
+            (info_x, info_y),
+        )
+        info_y += 20
+
+        inventory_text = f"Inventario: {len(player.inventory.items)}/{player.inventory.capacity}"
+        screen.blit(
+            render_text_with_background(font_small, inventory_text, (180, 220, 255), UI_BG_COLOR),
+            (info_x, info_y),
+        )
+        info_y += 24
+
         # Instrucciones
-        instructions: str = "WASD/flechas: mover | W/arriba: saltar | F: disparar | ESPACIO: regenerar | ESC: salir"
+        instructions: str = "WASD/flechas: mover | W/arriba: saltar | F: disparar | B: comprar | V: vender | ESPACIO: regenerar | ESC: salir"
+        if store_dialog_open:
+            instructions = "TIENDA ABIERTA: TAB cambia panel | Arriba/Abajo selecciona | ENTER confirma | E/ESC cierra"
+        else:
+            instructions = "WASD/flechas: mover | W/arriba: saltar | F: disparar | E: tienda | ESPACIO: regenerar | ESC: salir"
         instructions_surface: pygame.Surface = render_text_with_background(
             font_small, instructions, (150, 150, 150), UI_BG_COLOR
         )
@@ -423,6 +695,18 @@ def main() -> None:
             # Mensaje para reiniciar
             restart_text = render_text_with_background(font_medium, "Presiona ESPACIO para reiniciar", (255, 255, 255), (0, 0, 0))
             screen.blit(restart_text, (SCREEN_WIDTH // 2 - restart_text.get_width() // 2, SCREEN_HEIGHT // 2 + 150))
+
+        if store_dialog_open and not game_over:
+            draw_store_dialog(
+                screen,
+                font_small,
+                font_medium,
+                store,
+                player,
+                active_tab=store_dialog_tab,
+                buy_index=store_buy_index,
+                sell_index=store_sell_index,
+            )
 
         pygame.display.flip()
 
