@@ -11,7 +11,7 @@ class HUD:
     # Panel superior
     PANEL_HEIGHT: int = 100
     PANEL_COLOR: tuple[int, int, int] = (20, 20, 30)
-    PANEL_ALPHA: int = 200
+    PANEL_ALPHA: int = 0
 
     # Barras
     BAR_HEIGHT: int = 16
@@ -27,11 +27,11 @@ class HUD:
     # Texto
     FONT_SIZE_LARGE: int = 18
     FONT_SIZE_SMALL: int = 14
-    TEXT_COLOR: tuple[int, int, int] = (230, 230, 230)
-    LABEL_COLOR: tuple[int, int, int] = (160, 160, 180)
-    CASH_COLOR: tuple[int, int, int] = (255, 215, 60)
-    SHIELD_COLOR: tuple[int, int, int] = (100, 160, 255)
-    LEVEL_COLOR: tuple[int, int, int] = (255, 200, 60)
+    TEXT_COLOR: tuple[int, int, int] = (15, 15, 30)
+    LABEL_COLOR: tuple[int, int, int] = (40, 40, 60)
+    CASH_COLOR: tuple[int, int, int] = (150, 80, 0)
+    SHIELD_COLOR: tuple[int, int, int] = (0, 60, 180)
+    LEVEL_COLOR: tuple[int, int, int] = (140, 60, 0)
 
     # Inventario
     SLOT_SIZE: int = 44
