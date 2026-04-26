@@ -54,6 +54,8 @@ class Player(Sprite):
         self._last_shot_time: float = float("-inf")
         self.shield_duration: float = 0.0
         self.shield_defense_boost: float = 0.0
+        self.shield_hp: float = 0.0
+        self.shield_max_hp: float = 0.0
         self.shield_effect_timer: float = 0.0
         self.shield_pickup_timer: float = 0.0
         self.treasure_pickup_timer: float = 0.0
@@ -91,9 +93,17 @@ class Player(Sprite):
         return projectile
 
     def defend(self, damage: float) -> float:
-        """Recibe daño, aplica defensa y retorna el daño neto recibido."""
+        """Recibe daño. El escudo absorbe primero; el resto se aplica a HP con defensa."""
         if damage < 0:
             raise ValueError("damage no puede ser negativo")
+
+        # El escudo absorbe daño antes que la vida
+        if self.shield_hp > 0:
+            absorbed: float = min(self.shield_hp, damage)
+            self.shield_hp -= absorbed
+            damage -= absorbed
+            if damage <= 0:
+                return 0.0
 
         total_defense: float = self.stats.defense + self.shield_defense_boost
         for item in self.inventory.items:
@@ -103,7 +113,7 @@ class Player(Sprite):
         self.health = max(0.0, self.health - net_damage)
 
         if net_damage > 0:
-            self.damage_effect_timer = 0.2  # Efecto de daño por 0.2 segundos
+            self.damage_effect_timer = 0.2
 
         if self.health <= 0:
             self.is_active = False

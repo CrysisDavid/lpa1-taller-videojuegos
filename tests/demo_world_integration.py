@@ -22,6 +22,7 @@ from generate_enemies import generate_enemies_from_image
 from inventory.item import Item
 from inventory.store import Store
 from stats.stats import Stats
+from ui.hud import HUD
 from world.world import World
 
 # Configuración de pantalla
@@ -249,6 +250,7 @@ def main() -> None:
     world: World = World(screen=screen)
     world.generate(seed=2026, collectible_count=12, enemy_count=6)
     player: Player = create_player(screen)
+    hud: HUD = HUD(screen=screen, player=player)
     store: Store = create_store()
     player_vy: float = 0.0  # velocidad vertical para gravedad
     on_ground: bool = True
@@ -333,6 +335,7 @@ def main() -> None:
                     )
                     world.enemies = generate_enemies_from_image(screen, world.enemy_spawn_points)
                     player = create_player(screen)
+                    hud.player = player
                     store = create_store()
                     player_vy = 0.0
                     on_ground = True
@@ -353,6 +356,7 @@ def main() -> None:
                     # Generar enemigos usando la imagen
                     world.enemies = generate_enemies_from_image(screen, world.enemy_spawn_points)
                     player = create_player(screen)
+                    hud.player = player
                     store = create_store()
                     player_vy = 0.0
                     on_ground = True
@@ -420,10 +424,14 @@ def main() -> None:
                     elif player.colission(collectible):
                         if isinstance(collectible, Shield):
                             result = collectible.activate()
-                            boost = result.get("defense_boost", 0.0)
-                            player.stats.defense += boost
-                            player.trigger_shield_pickup_effect()  # Efecto visual azul
-                            messages.append((f"+{boost:.0f} DEF (Escudo)", 2.0))
+                            shield_hp = result.get("shield_hp", 50.0)
+                            player.shield_hp = min(
+                                player.shield_hp + shield_hp,
+                                player.shield_max_hp + shield_hp,
+                            )
+                            player.shield_max_hp = player.shield_hp
+                            player.trigger_shield_pickup_effect()
+                            messages.append((f"+{shield_hp:.0f} SC (Escudo)", 2.0))
                         elif isinstance(collectible, Trap):
                             dmg = collectible.explode(player.position)
                             net = player.defend(dmg)
@@ -509,6 +517,9 @@ def main() -> None:
             projectile.draw()
             projectile.position.x = saved_proj_x
 
+        # HUD del jugador (barras de HP/XP, nivel, dinero, inventario)
+        hud.draw()
+
         # Contar collectibles por tipo
         shield_count: int = sum(
             1 for c in world.collectibles if isinstance(c, Shield) and c.is_active
@@ -522,18 +533,9 @@ def main() -> None:
         )
         total_active: int = shield_count + trap_count + treasure_count
 
-        # Panel de información
-        info_y: int = 10
+        # Panel de información (debajo del HUD)
+        info_y: int = 110
         info_x: int = 10
-
-        # Título
-        title_surface: pygame.Surface = font_large.render(
-            "DEMO: Mundo con Player, Collectibles y Enemigos",
-            True,
-            (100, 200, 255),
-        )
-        screen.blit(title_surface, (info_x, info_y))
-        info_y += 35
 
         # Estado del mundo
         world_info: str = f"Cámara X: {world.camera.offset.x:.0f}"
