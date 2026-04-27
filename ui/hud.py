@@ -42,6 +42,13 @@ class HUD:
     INVENTORY_PANEL_ALPHA: int = 190
     MAX_VISIBLE_SLOTS: int = 8
 
+    # Recuadro del HUD
+    BOX_PAD: int = 8
+    BOX_COLOR: tuple[int, int, int] = (180, 180, 190)
+    BOX_ALPHA: int = 210
+    BOX_BORDER_COLOR: tuple[int, int, int] = (100, 100, 120)
+    BOX_BORDER_RADIUS: int = 12
+
     # Márgenes internos
     PADDING_X: int = 16
     PADDING_Y: int = 10
@@ -73,6 +80,30 @@ class HUD:
 
         x = self.PADDING_X
         y = self.PADDING_Y
+
+        # --- Recuadro gris con esquinas redondeadas ---
+        box_x = x - self.BOX_PAD
+        box_y = y - self.BOX_PAD
+        # ancho: etiqueta(28) + barra(BAR_WIDTH) + valor(80) + hueco(40) + columna nivel/cash(100)
+        box_w = 28 + self.BAR_WIDTH + 80 + 40 + 100 + self.BOX_PAD * 2
+        # alto: 3 barras con sus separadores + padding vertical
+        box_h = 3 * self.BAR_HEIGHT + 2 * 6 + self.BOX_PAD * 2
+        box_surf = pygame.Surface((box_w, box_h), pygame.SRCALPHA)
+        box_surf.fill((0, 0, 0, 0))
+        pygame.draw.rect(
+            box_surf,
+            (*self.BOX_COLOR, self.BOX_ALPHA),
+            pygame.Rect(0, 0, box_w, box_h),
+            border_radius=self.BOX_BORDER_RADIUS,
+        )
+        pygame.draw.rect(
+            box_surf,
+            (*self.BOX_BORDER_COLOR, 255),
+            pygame.Rect(0, 0, box_w, box_h),
+            width=2,
+            border_radius=self.BOX_BORDER_RADIUS,
+        )
+        self.screen.blit(box_surf, (box_x, box_y))
 
         # --- Barra de HP ---
         hp_ratio = self.player.health / max(self.player.stats.max_health, 1)
