@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<TextureAtlas imagePath="player_atlas.png">
+    <SubTexture name="idle_01" x="134" y="25" width="40" height="51" />
+    <SubTexture name="idle_02" x="209" y="25" width="40" height="51" />
+    <SubTexture name="idle_03" x="280" y="25" width="40" height="51" />
+    <SubTexture name="idle_04" x="355" y="25" width="40" height="51" />
+
+    <SubTexture name="walk_01" x="143" y="99" width="27" height="49" />
+    <SubTexture name="walk_02" x="219" y="98" width="24" height="49" />
+    <SubTexture name="walk_03" x="298" y="96" width="49" height="51" />
+    <SubTexture name="walk_04" x="357" y="99" width="40" height="49" />
+    <SubTexture name="walk_05" x="442" y="98" width="25" height="50" />
+    <SubTexture name="walk_06" x="520" y="96" width="21" height="52" />
+
+    <SubTexture name="run_01" x="137" y="175" width="46" height="47" />
+    <SubTexture name="run_02" x="218" y="178" width="28" height="44" />
+    <SubTexture name="run_03" x="282" y="178" width="47" height="44" />
+    <SubTexture name="run_04" x="359" y="175" width="44" height="47" />
+    <SubTexture name="run_05" x="441" y="178" width="27" height="44" />
+    <SubTexture name="run_06" x="504" y="177" width="51" height="45" />
+
+    <SubTexture name="jump_01" x="138" y="326" width="41" height="44" />
+    <SubTexture name="jump_02" x="213" y="324" width="41" height="46" />
+    <SubTexture name="jump_03" x="290" y="321" width="41" height="49" />
+    <SubTexture name="jump_04" x="361" y="315" width="41" height="49" />
+    <SubTexture name="jump_05" x="434" y="320" width="40" height="45" />
+    <SubTexture name="jump_06" x="512" y="324" width="41" height="46" />
+
+    <SubTexture name="hurt_01" x="133" y="394" width="41" height="50" />
+    <SubTexture name="hurt_02" x="211" y="394" width="41" height="50" />
+    <SubTexture name="hurt_03" x="283" y="394" width="41" height="50" />
+</TextureAtlas>
