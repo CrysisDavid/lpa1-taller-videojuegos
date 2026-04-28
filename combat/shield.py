@@ -10,6 +10,8 @@ class Shield(Collectible):
     DEFAULT_COLOR: tuple[int, int, int] = (80, 170, 240)
     DEFAULT_IMAGE: str = str(Path(__file__).parent.parent / "public" / "assets" / "escudo.png")
 
+    DEFAULT_SHIELD_HP: float = 50.0
+
     def __init__(
         self,
         screen: pygame.Surface,
@@ -19,11 +21,14 @@ class Shield(Collectible):
         duration: float,
         description: str = "Escudo básico",
         defense_boost: float = 0.0,
+        shield_hp: float = DEFAULT_SHIELD_HP,
     ) -> None:
         if duration <= 0:
             raise ValueError("duration debe ser mayor a 0")
         if defense_boost < 0:
             raise ValueError("defense_boost no puede ser negativo")
+        if shield_hp < 0:
+            raise ValueError("shield_hp no puede ser negativo")
 
         super().__init__(
             screen=screen,
@@ -36,6 +41,7 @@ class Shield(Collectible):
         )
         self.duration: float = duration
         self.defense_boost: float = defense_boost
+        self.shield_hp: float = shield_hp
 
     def draw(self) -> None:
         """Dibuja el escudo usando imagen si está disponible, sino círculo."""
@@ -50,4 +56,5 @@ class Shield(Collectible):
         return {
             "duration": self.duration,
             "defense_boost": self.defense_boost,
+            "shield_hp": self.shield_hp,
         }
