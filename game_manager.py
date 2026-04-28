@@ -627,6 +627,7 @@ class GameManager:
         self.messages = [(txt, t - dt) for txt, t in self.messages if t > 0]
 
         self.world.update(dt)
+        self.player.set_motion_state(self.player_vx, self.on_ground)
         self.player.update(dt)
 
         defeated_count = sum(1 for enemy in self.world.enemies if enemy.is_defeated)
