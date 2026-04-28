@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import pygame
 from pathlib import Path
+import re
 
 from core.sprite import Sprite
 from core.vector2d import Vector2D
@@ -9,6 +10,7 @@ from entities.proyectile import Proyectile
 from inventory.inventory import Inventory
 from inventory.item import Item
 from stats.stats import Stats
+from utils.spriteSheet import SpriteSheet
 
 
 class Player(Sprite):
@@ -18,8 +20,20 @@ class Player(Sprite):
     DEFAULT_RADIUS: int = 24
     DEFAULT_SHOT_COOLDOWN: float = 0.35
     DEFAULT_IMAGE: str = str(Path(__file__).parent.parent / "public" / "assets" / "player.gif")
+    DEFAULT_ATLAS_IMAGE: str = str(Path(__file__).parent.parent / "public" / "assets" / "player_atlas.png")
+    DEFAULT_ATLAS_XML: str = str(Path(__file__).parent.parent / "public" / "assets" / "player_atlas.xml")
     DEFAULT_PROJECTILE_VELOCITY: float = 700.0
     DEFAULT_PROJECTILE_LIFE_TIME: float = 4.0
+    DEFAULT_ANIMATION_FPS: float = 10.0
+    WALK_SPEED_THRESHOLD: float = 30.0
+    RUN_SPEED_THRESHOLD: float = 170.0
+    ANIMATION_FPS_BY_STATE: dict[str, float] = {
+        "idle": 8.0,
+        "walk": 12.0,
+        "run": 15.0,
+        "jump": 12.0,
+        "hurt": 20.0,
+    }
 
     def __init__(
         self,
@@ -59,6 +73,108 @@ class Player(Sprite):
         self.shield_effect_timer: float = 0.0
         self.shield_pickup_timer: float = 0.0
         self.treasure_pickup_timer: float = 0.0
+        self._motion_vx: float = 0.0
+        self._motion_on_ground: bool = True
+        self._facing_right: bool = True
+        self._anim_state: str = "idle"
+        self._anim_timer: float = 0.0
+        self._anim_index: int = 0
+        self._animation_sequences: dict[str, list[pygame.Surface]] = {
+            "idle": [],
+            "walk": [],
+            "run": [],
+            "jump": [],
+            "hurt": [],
+        }
+        self._load_animation_atlas()
+
+    def _extract_sort_index(self, frame_name: str) -> int:
+        match = re.search(r"(\d+)", frame_name)
+        return int(match.group(1)) if match is not None else 0
+
+    def _load_animation_atlas(self) -> None:
+        atlas = SpriteSheet(self.DEFAULT_ATLAS_IMAGE, self.DEFAULT_ATLAS_XML)
+        frames = atlas.get_all()
+        if not frames:
+            return
+
+        categorized: dict[str, list[tuple[str, pygame.Surface]]] = {
+            "idle": [],
+            "walk": [],
+            "run": [],
+            "jump": [],
+            "hurt": [],
+        }
+
+        for name, frame in frames.items():
+            lname = name.lower()
+            if "idle" in lname:
+                categorized["idle"].append((name, frame))
+            elif "walk" in lname:
+                categorized["walk"].append((name, frame))
+            elif "run" in lname:
+                categorized["run"].append((name, frame))
+            elif "jump" in lname:
+                categorized["jump"].append((name, frame))
+            elif "hurt" in lname or "hit" in lname:
+                categorized["hurt"].append((name, frame))
+
+        for state, pairs in categorized.items():
+            pairs.sort(key=lambda item: self._extract_sort_index(item[0]))
+            self._animation_sequences[state] = [frame for _, frame in pairs]
+
+        # Fallbacks para no dejar estados vacíos.
+        if not self._animation_sequences["idle"]:
+            any_frame = next(iter(frames.values()))
+            self._animation_sequences["idle"] = [any_frame]
+        if not self._animation_sequences["walk"]:
+            self._animation_sequences["walk"] = self._animation_sequences["idle"]
+        if not self._animation_sequences["run"]:
+            self._animation_sequences["run"] = self._animation_sequences["walk"]
+        if not self._animation_sequences["jump"]:
+            self._animation_sequences["jump"] = self._animation_sequences["idle"]
+        if not self._animation_sequences["hurt"]:
+            self._animation_sequences["hurt"] = self._animation_sequences["idle"]
+
+    def set_motion_state(self, vx: float, on_ground: bool) -> None:
+        """Recibe estado de movimiento desde GameManager para animar al player."""
+        self._motion_vx = vx
+        self._motion_on_ground = on_ground
+        if vx < -1e-3:
+            self._facing_right = False
+        elif vx > 1e-3:
+            self._facing_right = True
+
+    def _pick_animation_state(self) -> str:
+        if self.damage_effect_timer > 0:
+            return "hurt"
+        if not self._motion_on_ground:
+            return "jump"
+
+        speed = abs(self._motion_vx)
+        if speed >= self.RUN_SPEED_THRESHOLD:
+            return "run"
+        if speed >= self.WALK_SPEED_THRESHOLD:
+            return "walk"
+        return "idle"
+
+    def _update_animation(self, delta_time: float) -> None:
+        next_state = self._pick_animation_state()
+        if next_state != self._anim_state:
+            self._anim_state = next_state
+            self._anim_timer = 0.0
+            self._anim_index = 0
+
+        frames = self._animation_sequences.get(self._anim_state, [])
+        if len(frames) <= 1:
+            return
+
+        anim_fps = self.ANIMATION_FPS_BY_STATE.get(self._anim_state, self.DEFAULT_ANIMATION_FPS)
+        frame_duration = 1.0 / max(anim_fps, 1.0)
+        self._anim_timer += delta_time
+        while self._anim_timer >= frame_duration:
+            self._anim_timer -= frame_duration
+            self._anim_index = (self._anim_index + 1) % len(frames)
 
     # ------------------------------------------------------------------
     # Combate
@@ -152,6 +268,8 @@ class Player(Sprite):
         if self.treasure_pickup_timer > 0:
             self.treasure_pickup_timer -= delta_time
 
+        self._update_animation(delta_time)
+
     def trigger_shield_pickup_effect(self) -> None:
         """Activa el efecto visual de recoger un escudo."""
         self.shield_pickup_timer = 0.5  # Efecto por 0.5 segundos
@@ -165,23 +283,26 @@ class Player(Sprite):
         if not self.is_active:
             return
 
-        if self.image:
+        frames = self._animation_sequences.get(self._anim_state, [])
+        if frames:
+            frame = frames[self._anim_index % len(frames)]
+            scaled_frame = pygame.transform.scale(
+                frame,
+                (self.radius * 2, self.radius * 2),
+            )
+            if not self._facing_right:
+                scaled_frame = pygame.transform.flip(scaled_frame, True, False)
+            self.screen.blit(
+                scaled_frame,
+                (int(self.position.x - self.radius), int(self.position.y - self.radius)),
+            )
+        elif self.image:
             self.draw_image()
             # Efectos de overlay
             if self.shield_pickup_timer > 0:
                 overlay = pygame.Surface((self.radius * 2, self.radius * 2))
                 overlay.set_alpha(128)  # Semi-transparente
                 overlay.fill((100, 150, 255))  # Azul para recoger escudo
-                self.screen.blit(overlay, (int(self.position.x - self.radius), int(self.position.y - self.radius)))
-            elif self.treasure_pickup_timer > 0:
-                overlay = pygame.Surface((self.radius * 2, self.radius * 2))
-                overlay.set_alpha(128)  # Semi-transparente
-                overlay.fill((255, 255, 100))  # Amarillo para recoger tesoro
-                self.screen.blit(overlay, (int(self.position.x - self.radius), int(self.position.y - self.radius)))
-            elif self.shield_effect_timer > 0:
-                overlay = pygame.Surface((self.radius * 2, self.radius * 2))
-                overlay.set_alpha(128)  # Semi-transparente
-                overlay.fill((100, 150, 255))  # Azul para escudo activo
                 self.screen.blit(overlay, (int(self.position.x - self.radius), int(self.position.y - self.radius)))
         else:
             if self.damage_effect_timer > 0:
@@ -201,6 +322,20 @@ class Player(Sprite):
                 (int(self.position.x), int(self.position.y)),
                 self.radius
             )
+
+        # Overlays de pickup/escudo sobre cualquier frame.
+        if self.shield_pickup_timer > 0:
+            overlay = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+            overlay.fill((100, 150, 255, 128))
+            self.screen.blit(overlay, (int(self.position.x - self.radius), int(self.position.y - self.radius)))
+        elif self.treasure_pickup_timer > 0:
+            overlay = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+            overlay.fill((255, 255, 100, 128))
+            self.screen.blit(overlay, (int(self.position.x - self.radius), int(self.position.y - self.radius)))
+        elif self.shield_effect_timer > 0:
+            overlay = pygame.Surface((self.radius * 2, self.radius * 2), pygame.SRCALPHA)
+            overlay.fill((100, 150, 255, 128))
+            self.screen.blit(overlay, (int(self.position.x - self.radius), int(self.position.y - self.radius)))
 
     def collect(self, collectible: object) -> None:
         """Interactúa con un coleccionable del mundo."""
