@@ -88,18 +88,28 @@ class TestGameManager(unittest.TestCase):
     def test_check_victory_por_exploracion(self) -> None:
         self.manager.world.enemies = [DummyEnemy(False)]
         self.manager.world.camera.offset.x = self.manager.VICTORY_CAMERA_X
+        self.manager.boss_enemy = DummyEnemy(True)
 
         self.assertTrue(self.manager.check_victory())
 
     def test_check_victory_por_enemigos(self) -> None:
         self.manager.world.enemies = [DummyEnemy(True), DummyEnemy(True)]
         self.manager.world.camera.offset.x = 0.0
+        self.manager.boss_enemy = DummyEnemy(True)
 
         self.assertTrue(self.manager.check_victory())
 
     def test_check_victory_falsa_si_faltan_objetivos(self) -> None:
         self.manager.world.enemies = [DummyEnemy(True), DummyEnemy(False)]
         self.manager.world.camera.offset.x = self.manager.VICTORY_CAMERA_X - 1.0
+        self.manager.boss_enemy = DummyEnemy(False)
+
+        self.assertFalse(self.manager.check_victory())
+
+    def test_check_victory_falsa_si_boss_sigue_vivo(self) -> None:
+        self.manager.world.enemies = [DummyEnemy(True), DummyEnemy(True)]
+        self.manager.world.camera.offset.x = self.manager.VICTORY_CAMERA_X
+        self.manager.boss_enemy = DummyEnemy(False)
 
         self.assertFalse(self.manager.check_victory())
 

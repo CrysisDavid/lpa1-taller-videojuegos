@@ -6,6 +6,7 @@ import pygame
 
 from combat.shield import Shield
 from core.vector2d import Vector2D
+from entities.bossenemy import BossEnemy
 from entities.player import Player
 from entities.proyectile import Proyectile
 from entities.trap import Trap
@@ -38,6 +39,7 @@ class GameManager:
     STORE_INTERACTION_RANGE: float = 120.0
 
     VICTORY_CAMERA_X: float = 7000.0
+    BOSS_SPAWN_OFFSET_X: float = 1800.0
 
     def __init__(self, screen: pygame.Surface | None = None) -> None:
         pygame.init()
@@ -63,6 +65,8 @@ class GameManager:
         self.on_ground: bool = True
         self.player_facing: Vector2D = Vector2D(1.0, 0.0)
         self.projectiles: list[Proyectile] = []
+        self.boss_projectiles: list[Proyectile] = []
+        self.boss_enemy: BossEnemy | None = None
         self.messages: list[tuple[str, float]] = []
         self.game_over: bool = False
 
@@ -158,11 +162,20 @@ class GameManager:
         self.player = self._create_player()
         self.hud.player = self.player
         self.store = self._create_store()
+        self.boss_enemy = BossEnemy(
+            self.screen,
+            Vector2D(
+                self.SCREEN_WIDTH + self.BOSS_SPAWN_OFFSET_X,
+                self.GROUND_Y,
+            ),
+            "Boss Prime",
+        )
 
         self.player_vy = 0.0
         self.on_ground = True
         self.player_facing = Vector2D(1.0, 0.0)
         self.projectiles.clear()
+        self.boss_projectiles.clear()
         self.messages.clear()
         self.game_over = False
 
@@ -463,6 +476,14 @@ class GameManager:
                         self.messages.append((f"-{dmg:.0f} HP (Enemigo cercano)", 1.5))
                     enemy.attack_cooldown = 1.0
 
+        if self.boss_enemy is not None and not self.boss_enemy.is_defeated:
+            boss_projectile = self.boss_enemy.special_attack(
+                self.player,
+                current_time=pygame.time.get_ticks() / 1000.0,
+            )
+            if boss_projectile is not None:
+                self.boss_projectiles.append(boss_projectile)
+
         for projectile in self.projectiles:
             if not projectile.is_active:
                 continue
@@ -481,7 +502,27 @@ class GameManager:
                         else:
                             self.messages.append(("+25 XP", 1.0))
 
+            if self.boss_enemy is not None and not self.boss_enemy.is_defeated:
+                hit_damage = projectile.hit(self.boss_enemy)
+                if hit_damage > 0:
+                    self.messages.append((f"-{hit_damage:.0f} HP al boss", 1.0))
+                    if self.boss_enemy.is_defeated:
+                        gained_levels = self.player.gain_experience(100.0)
+                        self.player.health = self.player.stats.max_health
+                        self.messages.append((f"Boss derrotado! +{100:.0f} XP", 2.0))
+                        if gained_levels > 0:
+                            self.messages.append((f"LEVEL UP x{gained_levels}!", 1.5))
+
+        for boss_projectile in self.boss_projectiles:
+            if not boss_projectile.is_active:
+                continue
+            boss_projectile.update(dt)
+            hit_damage = boss_projectile.hit(self.player)
+            if hit_damage > 0:
+                self.messages.append((f"-{hit_damage:.0f} HP (Proyectil Boss)", 1.0))
+
         self.projectiles = [p for p in self.projectiles if p.is_active]
+        self.boss_projectiles = [p for p in self.boss_projectiles if p.is_active]
         self.messages = [(txt, t - dt) for txt, t in self.messages if t > 0]
 
         self.world.update(dt)
@@ -531,6 +572,22 @@ class GameManager:
             projectile.draw()
             projectile.position.x = saved_proj_x
 
+        for boss_projectile in self.boss_projectiles:
+            saved_proj_x = boss_projectile.position.x
+            boss_projectile.position.x = (
+                boss_projectile.position.x - self.world.camera.offset.x
+            )
+            boss_projectile.draw()
+            boss_projectile.position.x = saved_proj_x
+
+        if self.boss_enemy is not None and not self.boss_enemy.is_defeated:
+            saved_boss_x = self.boss_enemy.position.x
+            self.boss_enemy.position.x = (
+                self.boss_enemy.position.x - self.world.camera.offset.x
+            )
+            self.boss_enemy.draw()
+            self.boss_enemy.position.x = saved_boss_x
+
         self.hud.draw()
 
         info_y: int = 110
@@ -556,7 +613,18 @@ class GameManager:
                 (250, 210, 60),
             ),
             (f"Enemigos activos: {sum(1 for e in self.world.enemies if not e.is_defeated)}", (255, 120, 120)),
-            (f"Proyectiles: {len(self.projectiles)}", (255, 220, 100)),
+            (
+                f"Proyectiles: {len(self.projectiles)} / Boss: {len(self.boss_projectiles)}",
+                (255, 220, 100),
+            ),
+            (
+                (
+                    f"Boss HP: {self.boss_enemy.health:.0f}"
+                    if self.boss_enemy is not None and not self.boss_enemy.is_defeated
+                    else "Boss HP: 0"
+                ),
+                (255, 130, 190),
+            ),
             (
                 "TIENDA: EN RANGO" if is_near_store else "Tienda: fuera de rango",
                 (100, 255, 140) if is_near_store else (200, 180, 120),
@@ -649,6 +717,8 @@ class GameManager:
 
     def check_victory(self) -> bool:
         """Indica si se alcanzaron condiciones de victoria del nivel."""
+        if self.boss_enemy is not None and not self.boss_enemy.is_defeated:
+            return False
         enemies_cleared: bool = all(enemy.is_defeated for enemy in self.world.enemies)
         exploration_done: bool = self.world.camera.offset.x >= self.VICTORY_CAMERA_X
         return enemies_cleared or exploration_done

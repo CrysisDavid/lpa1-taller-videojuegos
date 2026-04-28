@@ -5,11 +5,11 @@ class SpriteSheet:
     def __init__(self, image_path, xml_path):
         try:
             self.sheet = pygame.image.load(image_path).convert_alpha()
-        except pygame.error as e:
-            print(f"Error loading image {image_path}: {e}")
+        except pygame.error:
+            # En tests/headless puede no haber video mode activo.
+            # Se hace fallback silencioso para usar render por color.
             self.sheet = None
-        except FileNotFoundError as e:
-            print(f"Image file not found: {image_path}: {e}")
+        except FileNotFoundError:
             self.sheet = None
 
         self.frames = {}
@@ -21,17 +21,14 @@ class SpriteSheet:
         try:
             tree = ET.parse(xml_path)
             root = tree.getroot()
-        except ET.ParseError as e:
-            print(f"Error parsing XML file {xml_path}: {e}")
+        except ET.ParseError:
             return
-        except FileNotFoundError as e:
-            print(f"XML file not found: {xml_path}: {e}")
+        except FileNotFoundError:
             return
 
         for subtexture in root.findall("SubTexture"):
             name = subtexture.get("name")
             if name is None:
-                print(f"Warning: SubTexture without name in {xml_path}")
                 continue
 
             try:
@@ -39,12 +36,10 @@ class SpriteSheet:
                 y = int(subtexture.get("y", 0))
                 w = int(subtexture.get("width", 0))
                 h = int(subtexture.get("height", 0))
-            except ValueError as e:
-                print(f"Error parsing attributes for frame '{name}' in {xml_path}: {e}")
+            except ValueError:
                 continue
 
             if w <= 0 or h <= 0:
-                print(f"Warning: Invalid dimensions for frame '{name}': w={w}, h={h}")
                 continue
 
             rect = pygame.Rect(x, y, w, h)
