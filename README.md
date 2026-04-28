@@ -130,7 +130,7 @@ El proyecto se dividirá en varias fases, comenzando con la creación de clases 
     
 ## Ejecución
 
-1. Ejecutar el proyecto
+1. Ejecutar el juego principal
 
     ```bash
     cd lpa1-taller-videojuegos
