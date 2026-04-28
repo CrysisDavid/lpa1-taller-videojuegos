@@ -81,7 +81,9 @@ class Proyectile(Sprite):
             return 0.0
 
         damage: float = self.stats.damage
-        if hasattr(enemy, "take_damage") and callable(enemy.take_damage):
+        if hasattr(enemy, "defend") and callable(enemy.defend):
+            net = enemy.defend(damage)
+        elif hasattr(enemy, "take_damage") and callable(enemy.take_damage):
             net = enemy.take_damage(damage)
         elif hasattr(enemy, "health"):
             net = damage
