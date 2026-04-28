@@ -195,5 +195,30 @@ class TestPlayerProgression(unittest.TestCase):
         self.assertEqual(p.stats.level, 2)
 
 
+class TestPlayerAnimationState(unittest.TestCase):
+    def setUp(self) -> None:
+        self.screen = make_screen()
+
+    def tearDown(self) -> None:
+        pygame.quit()
+
+    def test_anim_state_run_con_velocidad_alta_en_suelo(self) -> None:
+        p = make_player(self.screen)
+        p.set_motion_state(vx=220.0, on_ground=True)
+
+        p.update(0.05)
+
+        self.assertEqual(p._anim_state, "run")
+
+    def test_anim_state_hurt_tiene_prioridad(self) -> None:
+        p = make_player(self.screen)
+        p.set_motion_state(vx=220.0, on_ground=True)
+        p.damage_effect_timer = 0.2
+
+        p.update(0.01)
+
+        self.assertEqual(p._anim_state, "hurt")
+
+
 if __name__ == "__main__":
     unittest.main()
