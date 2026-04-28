@@ -32,10 +32,16 @@ class GameManager:
     STORE_COLOR: tuple[int, int, int] = (225, 170, 60)
     STORE_ACTIVE_COLOR: tuple[int, int, int] = (90, 220, 120)
 
-    PLAYER_SPEED: float = 200.0
-    GRAVITY: float = 600.0
+    PLAYER_SPEED: float = 320.0
+    AIR_CONTROL_MULTIPLIER: float = 1.5
+    GROUND_ACCELERATION: float = 3600.0
+    AIR_ACCELERATION: float = 1800.0
+    GROUND_DRAG: float = 2200.0
+    AIR_DRAG: float = 700.0
+    GRAVITY: float = 800.0
     JUMP_FORCE: float = -380.0
     GROUND_Y: float = 510.0
+    VOID_Y_MARGIN: float = 180.0
     STORE_INTERACTION_RANGE: float = 120.0
 
     VICTORY_CAMERA_X: float = 7000.0
@@ -62,6 +68,7 @@ class GameManager:
         self.store: Store = self._create_store()
 
         self.player_vy: float = 0.0
+        self.player_vx: float = 0.0
         self.on_ground: bool = True
         self.player_facing: Vector2D = Vector2D(1.0, 0.0)
         self.projectiles: list[Proyectile] = []
@@ -151,6 +158,71 @@ class GameManager:
             effect_parts.append(f"DEF +{int(item.defense_boost)}")
         return ", ".join(effect_parts) if effect_parts else "sin efecto"
 
+    def _resolve_platform_landing(self, previous_y: float) -> None:
+        """Resuelve aterrizaje sobre plataformas al caer."""
+        self.on_ground = False
+        if self.player_vy < 0:
+            return
+
+        previous_bottom: float = previous_y + self.player.radius
+        current_bottom: float = self.player.position.y + self.player.radius
+
+        best_top: float | None = None
+        horizontal_margin: float = self.player.radius * 0.4
+
+        for platform in self.world.platforms:
+            within_x = (
+                (platform.x - horizontal_margin)
+                <= self.player.position.x
+                <= (platform.x + platform.width + horizontal_margin)
+            )
+            if not within_x:
+                continue
+
+            platform_top: float = platform.y
+            crossed_top = previous_bottom <= platform_top <= current_bottom
+            if not crossed_top:
+                continue
+
+            if best_top is None or platform_top < best_top:
+                best_top = platform_top
+
+        if best_top is not None:
+            self.player.position.y = best_top - self.player.radius
+            self.player_vy = 0.0
+            self.on_ground = True
+
+    def _snap_player_to_spawn_platform(self) -> None:
+        """Posiciona al jugador sobre una plataforma válida al iniciar."""
+        if not self.world.platforms:
+            self.player.position.y = self.GROUND_Y
+            self.on_ground = True
+            self.player_vy = 0.0
+            return
+
+        horizontal_margin: float = self.player.radius * 0.4
+        supporting_platforms = [
+            platform
+            for platform in self.world.platforms
+            if (platform.x - horizontal_margin)
+            <= self.player.position.x
+            <= (platform.x + platform.width + horizontal_margin)
+        ]
+
+        if supporting_platforms:
+            spawn_platform = min(supporting_platforms, key=lambda p: p.y)
+        else:
+            # Fallback: usa la plataforma más cercana en X.
+            spawn_platform = min(
+                self.world.platforms,
+                key=lambda p: abs((p.x + p.width * 0.5) - self.player.position.x),
+            )
+            self.player.position.x = spawn_platform.x + spawn_platform.width * 0.5
+
+        self.player.position.y = spawn_platform.y - self.player.radius
+        self.on_ground = True
+        self.player_vy = 0.0
+
     def start_game(self, seed: int | None = None) -> None:
         """Inicializa o reinicia una partida completa."""
         self.world.generate(seed=seed, collectible_count=12, enemy_count=6)
@@ -160,6 +232,7 @@ class GameManager:
         )
 
         self.player = self._create_player()
+        self._snap_player_to_spawn_platform()
         self.hud.player = self.player
         self.store = self._create_store()
         self.boss_enemy = BossEnemy(
@@ -172,6 +245,7 @@ class GameManager:
         )
 
         self.player_vy = 0.0
+        self.player_vx = 0.0
         self.on_ground = True
         self.player_facing = Vector2D(1.0, 0.0)
         self.projectiles.clear()
@@ -397,12 +471,32 @@ class GameManager:
             return
 
         keys = pygame.key.get_pressed()
-        dx: float = 0.0
+        input_axis: float = 0.0
         if keys[pygame.K_LEFT] or keys[pygame.K_a]:
-            dx -= self.PLAYER_SPEED * dt
+            input_axis -= 1.0
         if keys[pygame.K_RIGHT] or keys[pygame.K_d]:
-            dx += self.PLAYER_SPEED * dt
-        self.player.position.x += dx
+            input_axis += 1.0
+
+        move_speed: float = (
+            self.PLAYER_SPEED
+            if self.on_ground
+            else self.PLAYER_SPEED * self.AIR_CONTROL_MULTIPLIER
+        )
+
+        acceleration: float = (
+            self.GROUND_ACCELERATION if self.on_ground else self.AIR_ACCELERATION
+        )
+        drag: float = self.GROUND_DRAG if self.on_ground else self.AIR_DRAG
+
+        if input_axis != 0.0:
+            self.player_vx += input_axis * acceleration * dt
+        elif self.player_vx > 0.0:
+            self.player_vx = max(0.0, self.player_vx - drag * dt)
+        elif self.player_vx < 0.0:
+            self.player_vx = min(0.0, self.player_vx + drag * dt)
+
+        self.player_vx = max(-move_speed, min(move_speed, self.player_vx))
+        self.player.position.x += self.player_vx * dt
 
         viewport_left_world = self.world.camera.offset.x + self.player.radius
         viewport_right_world = (
@@ -410,12 +504,14 @@ class GameManager:
         )
         if self.player.position.x < viewport_left_world:
             self.player.position.x = viewport_left_world
+            self.player_vx = max(0.0, self.player_vx)
         elif self.player.position.x > viewport_right_world:
             self.player.position.x = viewport_right_world
+            self.player_vx = min(0.0, self.player_vx)
 
-        if dx < 0:
+        if self.player_vx < -1e-3:
             self.player_facing = Vector2D(-1.0, 0.0)
-        elif dx > 0:
+        elif self.player_vx > 1e-3:
             self.player_facing = Vector2D(1.0, 0.0)
 
         if (
@@ -432,12 +528,17 @@ class GameManager:
             if projectile is not None:
                 self.projectiles.append(projectile)
 
+        previous_y: float = self.player.position.y
         self.player_vy += self.GRAVITY * dt
         self.player.position.y += self.player_vy * dt
-        if self.player.position.y >= self.GROUND_Y:
-            self.player.position.y = self.GROUND_Y
-            self.player_vy = 0.0
-            self.on_ground = True
+        self._resolve_platform_landing(previous_y)
+
+        void_limit_y: float = self.SCREEN_HEIGHT + self.VOID_Y_MARGIN
+        if (self.player.position.y - self.player.radius) > void_limit_y:
+            self.player.is_active = False
+            self.game_over = True
+            self.messages.append(("Caíste al vacío", 2.0))
+            return
 
         for collectible in self.world.collectibles:
             if not collectible.is_active:

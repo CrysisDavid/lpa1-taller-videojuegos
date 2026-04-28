@@ -22,6 +22,16 @@ class DummyEnemy:
         self.is_defeated = is_defeated
 
 
+class FakeKeys:
+    """Simula teclado para tests de movimiento."""
+
+    def __init__(self, pressed: set[int]) -> None:
+        self.pressed = pressed
+
+    def __getitem__(self, key: int) -> bool:
+        return key in self.pressed
+
+
 class TestGameManager(unittest.TestCase):
     """Verifica inicialización, reinicio y victoria del GameManager."""
 
@@ -112,6 +122,63 @@ class TestGameManager(unittest.TestCase):
         self.manager.boss_enemy = DummyEnemy(False)
 
         self.assertFalse(self.manager.check_victory())
+
+    def test_caida_al_vacio_activa_game_over(self) -> None:
+        self.manager.player.position.y = (
+            self.manager.SCREEN_HEIGHT + self.manager.VOID_Y_MARGIN + 300.0
+        )
+        self.manager.player_vy = 0.0
+        self.manager.on_ground = False
+
+        self.manager.update(0.016)
+
+        self.assertTrue(self.manager.game_over)
+        self.assertFalse(self.manager.player.is_active)
+
+    def test_spawn_inicia_sobre_una_plataforma(self) -> None:
+        player_bottom = self.manager.player.position.y + self.manager.player.radius
+        support_margin = self.manager.player.radius * 0.4
+
+        is_supported = any(
+            abs(platform.y - player_bottom) < 1e-6
+            and (platform.x - support_margin)
+            <= self.manager.player.position.x
+            <= (platform.x + platform.width + support_margin)
+            for platform in self.manager.world.platforms
+        )
+
+        self.assertTrue(self.manager.on_ground)
+        self.assertTrue(is_supported)
+
+    def test_player_puede_moverse_en_aire(self) -> None:
+        self.manager.on_ground = False
+        self.manager.player_vy = -100.0
+        start_x = self.manager.player.position.x
+
+        with patch("game_manager.pygame.key.get_pressed", return_value=FakeKeys({pygame.K_RIGHT})):
+            self.manager.update(0.1)
+
+        self.assertGreater(self.manager.player.position.x, start_x)
+
+    def test_player_desacelera_sin_input(self) -> None:
+        self.manager.on_ground = True
+        self.manager.player_vx = self.manager.PLAYER_SPEED
+
+        with patch("game_manager.pygame.key.get_pressed", return_value=FakeKeys(set())):
+            self.manager.update(0.05)
+
+        self.assertLess(self.manager.player_vx, self.manager.PLAYER_SPEED)
+
+    def test_player_sale_del_borde_izquierdo_al_mover_derecha(self) -> None:
+        left_world = self.manager.world.camera.offset.x + self.manager.player.radius
+        self.manager.player.position.x = left_world
+        start_screen_x = self.manager.player.position.x - self.manager.world.camera.offset.x
+
+        with patch("game_manager.pygame.key.get_pressed", return_value=FakeKeys({pygame.K_RIGHT})):
+            self.manager.update(0.1)
+
+        end_screen_x = self.manager.player.position.x - self.manager.world.camera.offset.x
+        self.assertGreater(end_screen_x, start_screen_x)
 
 
 if __name__ == "__main__":
