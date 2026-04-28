@@ -48,6 +48,7 @@ lpa1-taller-videojuegos/
 │   └── vector2d.py              # Clase Vector2D (matemáticas 2D)
 ├── entities/
 │   ├── __init__.py
+│   ├── bossenemy.py             # Clase BossEnemy
 │   ├── collectible.py           # Clase base Collectible
 │   ├── enemy.py                 # Clase Enemy
 │   ├── player.py                # Clase Player
