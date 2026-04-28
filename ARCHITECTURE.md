@@ -36,6 +36,7 @@ El proyecto sigue un diseño orientado a objetos con responsabilidades claras po
 ```
 lpa1-taller-videojuegos/
 ├── main.py                      # Punto de entrada principal
+├── game_manager.py              # Clase GameManager (loop principal y orquestación)
 ├── generate_enemies.py          # Script para generar enemigos dinámicamente
 ├── ARCHITECTURE.md              # Este archivo — fuente de verdad
 ├── README.md                    # Requerimientos del taller
@@ -72,6 +73,9 @@ lpa1-taller-videojuegos/
 ├── stats/
 │   ├── __init__.py
 │   └── stats.py                 # Clase Stats (experiencia, nivel, atributos)
+├── ui/
+│   ├── __init__.py
+│   └── hud.py                   # Clase HUD (estado del jugador en pantalla)
 ├── utils/
 │   └── spriteSheet.py           # Clase SpriteSheet (carga de sprites desde XML)
 ├── public/
