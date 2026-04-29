@@ -788,7 +788,7 @@ Antes de aceptar cualquier bloque de código sugerido por IA, verificar:
 
 ## Cambios Recientes — Historial de Versiones
 
-### v1.1 (28 Abr 2026)
+### v1.0 (28 Abr 2026)
 
 **Progresión y dificultad:**
 - Selección de dificultad al inicio (`fácil`, `media`, `difícil`) con actualización de parámetros del juego.
@@ -803,8 +803,6 @@ Antes de aceptar cualquier bloque de código sugerido por IA, verificar:
 - Soporte de orientación visual del boss mediante flip horizontal según dirección de movimiento.
 - Ajuste de balance: salud base del boss incrementada de `260.0` a `420.0`.
 - Cartel de victoria al derrotar al jefe con resumen de enemigos vencidos, experiencia y dinero.
-
-### v1.0 (28 Abr 2026)
 
 **CombatSystem (Nuevo):**
 - Clase centralizada `CombatSystem` con 3 métodos estáticos:
