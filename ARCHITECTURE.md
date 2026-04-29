@@ -1,7 +1,15 @@
 # Arquitectura del Videojuego — Lineamientos de Desarrollo
 
-> **Versión:** 1.0 | **Motor:** Python 3.11+ / Pygame 2.x  
+> **Versión:** 1.1 | **Motor:** Python 3.12+ / Pygame 2.x  
 > **Este documento es la fuente de verdad del proyecto. Todo código nuevo y toda IA asistente deben regirse por él.**
+>
+> **Cambios recientes (v1.1):**
+> - Flujo de progresión pre-boss finito con aparición del jefe final al cumplir objetivo de enemigos.
+> - Sistema de dificultad seleccionable (`fácil`, `media`, `difícil`) con ajuste de parámetros en runtime.
+> - Tienda integrada al loop con pausa del juego al abrir diálogo, compra/venta/uso de ítems y acceso por teclado.
+> - Pausa global del juego (`P`) y resumen de victoria tras derrotar al jefe final.
+> - IA de `BossEnemy` mejorada: persecución, saltos situacionales, cambio de dirección y flip visual.
+> - Ajuste de balance del jefe: vida base por defecto aumentada a `420.0`.
 
 ---
 
@@ -59,6 +67,7 @@ lpa1-taller-videojuegos/
 │   └── treasure.py              # Clase Treasure
 ├── combat/
 │   ├── __init__.py
+│   ├── combat_system.py         # Clase CombatSystem (resolución de combate)
 │   └── shield.py                # Clase Shield (componente defensivo)
 ├── world/
 │   ├── __init__.py
@@ -81,18 +90,21 @@ lpa1-taller-videojuegos/
 ├── public/
 │   └── assets/
 │       ├── platforms.png        # Sprite sheet de plataformas (1600×177px)
-│       └── platforms.xml        # Descripción de frames con mosaicos
+│       ├── platforms.xml        # Descripción de frames con mosaicos
+│       ├── player_atlas.png     # Sprite sheet del jugador (animaciones)
+│       └── player_atlas.xml     # Descripción de frames de animación (idle, walk, run, jump, hurt)
 ├── docs/
 │   ├── classDiagram.mmd         # Fuente Mermaid del diagrama de clases
 │   └── diagrama_clases.md       # Diagrama de clases en Markdown
 └── tests/
-    ├── demo_world_integration.py    # Demo visual: World + Entities + Controles
-    ├── test_enemy.py                # Tests para clase Enemy
-    ├── test_player.py               # Tests para clase Player
-    ├── test_proyectile.py           # Tests para clase Proyectile
-    ├── test_stats.py                # Tests para clase Stats
+    ├── demo_world_integration.py        # Demo visual: World + Entities + Controles
+    ├── test_combat_system.py            # Tests para CombatSystem
+    ├── test_enemy.py                    # Tests para clase Enemy
+    ├── test_player.py                   # Tests para clase Player (incluye animación)
+    ├── test_proyectile.py               # Tests para clase Proyectile
+    ├── test_stats.py                    # Tests para clase Stats
     ├── test_world_enemy_integration.py  # Integración World + Enemy
-    └── test_world_mechanics.py      # Tests para mecánicas de mundo
+    └── test_world_mechanics.py          # Tests para mecánicas de mundo
 ```
 
 **Regla:** un archivo = una clase principal. No agrupar clases no relacionadas en el mismo módulo.
@@ -142,11 +154,11 @@ Camera      ──> Vector2D  (offset, velocidad de scroll)
 Platform    ──> Vector2D  (pos, size)
 Enemy       ──> Vector2D  (size, velocity, pos)
 Player      ──> Vector2D  (hereda de Sprite)
+Player      ──> SpriteSheet (cargar atlas de animación)
 Proyectile  ──> Vector2D  (dirección y movimiento)
 Trap        ──> Vector2D  (zona de explosión)
 Store       ──> Vector2D  (posición de la zona de venta)
-Player      ──> CombatSystem (resolver combate)
-Enemy       ──> CombatSystem (resolver combate)
+GameManager ──> CombatSystem (resolver combate centralizado)
 HUD         ──> Player (mostrar estado)
 ```
 
@@ -158,7 +170,7 @@ HUD         ──> Player (mostrar estado)
 | `Sprite` | Estado y dibujo base de cualquier entidad visual en pantalla |
 | `Player` | Acciones del jugador: atacar, defender, recolectar, comprar/vender y progresar |
 | `Enemy` | Comportamiento de enemigos con atributos de combate y tipo de entidad |
-| `BossEnemy` | Variante de enemigo final con fases y ataques especiales |
+| `BossEnemy` | Variante de enemigo final con fases, ataques especiales y movimiento dinámico (vida base 420) |
 | `Collectible` | Lógica compartida de objetos recogibles con tiempo de vida |
 | `Shield` | Objeto defensivo recolectable con duración |
 | `Trap` | Trampa explosiva con daño y alcance de explosión |
@@ -168,12 +180,13 @@ HUD         ──> Player (mostrar estado)
 | `Inventory` | Gestión de ítems del jugador (agregar y remover) |
 | `Item` | Equipamiento con bonus de ataque/defensa y precios de compra/venta |
 | `Store` | Gestión de inventario comercial y transacciones con el jugador |
-| `CombatSystem` | Cálculo de daño y resolución de combate con efectos especiales |
+| `CombatSystem` | Cálculo centralizado de daño (ataque - defensa), resolución bidireccional de combate y aplicación de efectos especiales |
+| `SpriteSheet` | Carga de sprites desde atlas PNG con definición de frames en XML Texture Atlas |
 | `HUD` | Mostrar vida, inventario, nivel y retroalimentación visual al jugador |
 | `Camera` | Traducir coordenadas del mundo a coordenadas de pantalla y viceversa |
 | `Platform` | Representar una superficie sobre la que el jugador puede pararse |
 | `World` | Generación y dibujo del mundo, incluyendo distribución de elementos |
-| `GameManager` | Orquestar bucle de juego, puntaje, progreso de exploración y victoria |
+| `GameManager` | Orquestar bucle, dificultad, pausa/tienda, progreso pre-boss y victoria final |
 
 ---
 
@@ -771,4 +784,55 @@ Antes de aceptar cualquier bloque de código sugerido por IA, verificar:
 
 *Si deseas aportar  a la mejora de este archivo guia es importante abrir un Pull Request, ❌ no se permiten modificaciones sin previa revisión*
 
-*Fin del documento — última actualización: versión inicial.*
+---
+
+## Cambios Recientes — Historial de Versiones
+
+### v1.1 (28 Abr 2026)
+
+**Progresión y dificultad:**
+- Selección de dificultad al inicio (`fácil`, `media`, `difícil`) con actualización de parámetros del juego.
+- Flujo de enemigos pre-boss controlado para garantizar condición de aparición del jefe final.
+
+**Tienda, pausas e interacción:**
+- Integración de pausa al abrir la tienda para congelar actualización de mundo durante la transacción.
+- Controles de interacción ampliados para abrir tienda, usar ítems y pausar el juego.
+
+**Boss final y cierre de partida:**
+- `BossEnemy` con comportamiento de movimiento libre (avance, retroceso y salto por contexto).
+- Soporte de orientación visual del boss mediante flip horizontal según dirección de movimiento.
+- Ajuste de balance: salud base del boss incrementada de `260.0` a `420.0`.
+- Cartel de victoria al derrotar al jefe con resumen de enemigos vencidos, experiencia y dinero.
+
+### v1.0 (28 Abr 2026)
+
+**CombatSystem (Nuevo):**
+- Clase centralizada `CombatSystem` con 3 métodos estáticos:
+  - `calculate_damage(attacker_atk, defender_def)`: calcula daño neto (ataque - defensa, mínimo 1.0)
+  - `apply_special_effect(trap, target)`: aplica daño de trampas proporcional a distancia desde epicentro
+  - `resolve_combat(player, enemy)`: resuelve combate bidireccional, ambos bandos reciben daño
+- Integración en `GameManager`: reemplazo de `enemy.attack(player)` con `CombatSystem.resolve_combat()` para combate centralizado
+
+**Player Animation (Nuevo):**
+- Sistema de animación por atlas XML (`player_atlas.png` + `player_atlas.xml`)
+- Estados animables: `idle` (8 FPS), `walk` (12 FPS), `run` (15 FPS), `jump` (12 FPS), `hurt` (20 FPS)
+- Transiciones automáticas según velocidad horizontal y estado de suelo
+- Apoyo a flip horizontal según dirección de movimiento (`_facing_right`)
+- Fallback seguro a sprite estático si atlas no disponible
+
+**Utils Enhancement:**
+- `SpriteSheet` ya existente, ahora utilizado por `Player._load_animation_atlas()`
+- Parsing robusto de frames XML con categorización automática por nombre
+
+**Tests:**
+- 17 tests nuevos para `CombatSystem` (daño, efectos especiales, resolución combate)
+- 2 tests nuevos para `Player` (run animation, hurt priority)
+- Total: 110 tests, todos pasando ✅
+
+### Pre-v1.0 (Inicial)
+- Estructura base con World, Player, Enemy, Inventory, Stats, HUD
+- Sistema de plataformas y movimiento con física de platformer
+- Sistema de tienda y recolección de items
+- Boss con fases y ataques especiales
+
+*Fin del documento — última actualización: v1.1 (28 Abr 2026)*
