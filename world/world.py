@@ -32,6 +32,7 @@ class World:
     DEFAULT_TRAP_RANGE: float = 60.0
     DEFAULT_TREASURE_BASE_VALUE: float = 50.0
     RESPAWN_VERTICAL_OFFSET: float = 30.0
+    OFFSCREEN_CULL_MARGIN: float = 200.0
 
     def __init__(self, screen: pygame.Surface) -> None:
         """
@@ -47,6 +48,8 @@ class World:
         self.collectible_spawn_points: List[Vector2D] = []
         self.collectibles: List[Shield | Trap | Treasure] = []
         self.enemies: List[Enemy] = []
+        self.dynamic_enemy_spawn_enabled: bool = True
+        self.dynamic_collectible_spawn_enabled: bool = True
         self._rng: random.Random = random.Random()
         
         # Inicializa SpriteSheet para plataformas
@@ -149,13 +152,15 @@ class World:
         """Regenera un enemy y un collectible al crear una nueva plataforma."""
         spawn_y: float = platform.y - self.RESPAWN_VERTICAL_OFFSET
 
-        enemy_point: Vector2D = Vector2D(self._random_x_on_platform(platform), spawn_y)
-        self.enemy_spawn_points.append(enemy_point)
-        self._instantiate_enemies(self._rng)
+        if self.dynamic_enemy_spawn_enabled:
+            enemy_point: Vector2D = Vector2D(self._random_x_on_platform(platform), spawn_y)
+            self.enemy_spawn_points.append(enemy_point)
+            self._instantiate_enemies(self._rng)
 
-        collectible_point: Vector2D = Vector2D(self._random_x_on_platform(platform), spawn_y)
-        self.collectible_spawn_points.append(collectible_point)
-        self._instantiate_collectibles(self._rng)
+        if self.dynamic_collectible_spawn_enabled:
+            collectible_point: Vector2D = Vector2D(self._random_x_on_platform(platform), spawn_y)
+            self.collectible_spawn_points.append(collectible_point)
+            self._instantiate_collectibles(self._rng)
 
     def place_enemies(
         self,
@@ -295,6 +300,15 @@ class World:
         for enemy in self.enemies:
             if not enemy.is_defeated:
                 enemy.update(delta_time)
+
+        # Limpia entidades que ya quedaron muy atrás de la cámara.
+        cull_left_x: float = self.camera.offset.x - self.OFFSCREEN_CULL_MARGIN
+        for collectible in self.collectibles:
+            if collectible.is_active and collectible.x < cull_left_x:
+                collectible.is_active = False
+        for enemy in self.enemies:
+            if not enemy.is_defeated and enemy.x < cull_left_x:
+                enemy.is_active = False
 
     def _generate_distant_platforms(self) -> None:
         """
