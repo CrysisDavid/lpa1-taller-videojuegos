@@ -18,11 +18,11 @@ class Player(Sprite):
 
     DEFAULT_COLOR: tuple[int, int, int] = (80, 150, 220)
     DEFAULT_RADIUS: int = 24
-    DEFAULT_SHOT_COOLDOWN: float = 0.35
+    DEFAULT_SHOT_COOLDOWN: float = 2
     DEFAULT_IMAGE: str = str(Path(__file__).parent.parent / "public" / "assets" / "player.gif")
     DEFAULT_ATLAS_IMAGE: str = str(Path(__file__).parent.parent / "public" / "assets" / "player_atlas.png")
     DEFAULT_ATLAS_XML: str = str(Path(__file__).parent.parent / "public" / "assets" / "player_atlas.xml")
-    DEFAULT_PROJECTILE_VELOCITY: float = 700.0
+    DEFAULT_PROJECTILE_VELOCITY: float = 900.0
     DEFAULT_PROJECTILE_LIFE_TIME: float = 4.0
     DEFAULT_ANIMATION_FPS: float = 10.0
     WALK_SPEED_THRESHOLD: float = 30.0
@@ -342,13 +342,36 @@ class Player(Sprite):
         if hasattr(collectible, "collect") and callable(collectible.collect):
             collectible.collect()
 
+    def _is_shield_item(self, item: Item) -> bool:
+        """Determina si un item debe comportarse como escudo consumible."""
+        item_name = item.name.lower()
+        item_description = item.description.lower()
+        return "escudo" in item_name or "shield" in item_name or "escudo" in item_description
+
+    def _apply_shield_item_effect(self, item: Item) -> None:
+        """Convierte un item de escudo en puntos para la barra de escudo."""
+        shield_points: float = max(10.0, item.defense_boost * 10.0)
+        self.shield_max_hp = max(self.shield_max_hp, self.shield_hp) + shield_points
+        self.shield_hp = min(self.shield_hp + shield_points, self.shield_max_hp)
+        self.shield_effect_timer = max(self.shield_effect_timer, 2.0)
+        self.trigger_shield_pickup_effect()
+
     def use_item(self, item: Item) -> bool:
         """Usa un ítem del inventario. Retorna True si se usó correctamente."""
         if item not in self.inventory.items:
             return False
+
         self.stats.damage += item.attack_boost
         self.stats.defense += item.defense_boost
+
+        if self._is_shield_item(item):
+            self._apply_shield_item_effect(item)
+
+        previous_health = self.health
         self.health = min(self.health + item.damage, self.stats.max_health)
+        if self.health > previous_health:
+            self.trigger_treasure_pickup_effect()
+
         self.inventory.remove_item(item)
         return True
 
