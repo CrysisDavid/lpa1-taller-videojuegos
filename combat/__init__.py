@@ -1,3 +1,6 @@
 """Módulo de combate del juego."""
 
-__all__ = ["shield"]
+from combat.combat_system import CombatSystem
+from combat.shield import Shield
+
+__all__ = ["CombatSystem", "Shield"]
