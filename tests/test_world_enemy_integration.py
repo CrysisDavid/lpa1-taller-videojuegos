@@ -12,6 +12,7 @@ from entities.enemy import Enemy
 from combat.shield import Shield
 from entities.trap import Trap
 from entities.treasure import Treasure
+from core.vector2d import Vector2D
 from world.world import World
 
 SCREEN_W, SCREEN_H = 800, 600
@@ -133,6 +134,26 @@ class TestWorldEnemyIntegration(unittest.TestCase):
         ]
         self.assertGreater(len(visible_enemies), 0)
         self.assertGreater(len(visible_collectibles), 0)
+
+    def test_update_desactiva_enemy_detras_de_camara(self) -> None:
+        self.world.generate(seed=5, enemy_count=1, collectible_count=0)
+        enemy = self.world.enemies[0]
+        enemy.position = Vector2D(50.0, enemy.position.y)
+        self.world.camera.offset.x = 600.0
+
+        self.world.update(delta_time=0.0)
+
+        self.assertTrue(enemy.is_defeated)
+
+    def test_update_desactiva_collectible_detras_de_camara(self) -> None:
+        self.world.generate(seed=6, enemy_count=0, collectible_count=1)
+        collectible = self.world.collectibles[0]
+        collectible.position = Vector2D(40.0, collectible.position.y)
+        self.world.camera.offset.x = 600.0
+
+        self.world.update(delta_time=0.0)
+
+        self.assertFalse(collectible.is_active)
 
 
 if __name__ == "__main__":

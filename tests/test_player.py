@@ -174,6 +174,38 @@ class TestPlayerInventory(unittest.TestCase):
         sold = p.sell_item(item, object())
         self.assertFalse(sold)
 
+    def test_use_item_escudo_actualiza_barra_escudo(self) -> None:
+        p = make_player(self.screen)
+        p.shield_hp = 0.0
+        p.shield_max_hp = 0.0
+        shield_item = Item(
+            "Escudo Reforzado",
+            description="Aumenta defensa base.",
+            defense_boost=4.0,
+        )
+        p.inventory.add_item(shield_item)
+
+        used = p.use_item(shield_item)
+
+        self.assertTrue(used)
+        self.assertGreater(p.shield_hp, 0.0)
+        self.assertGreater(p.shield_max_hp, 0.0)
+        self.assertGreater(p.shield_effect_timer, 0.0)
+        self.assertNotIn(shield_item, p.inventory.items)
+
+    def test_use_item_curacion_actualiza_vida(self) -> None:
+        p = make_player(self.screen)
+        p.health = 40.0
+        heal_item = Item("Elixir Vital", damage=30.0)
+        p.inventory.add_item(heal_item)
+
+        used = p.use_item(heal_item)
+
+        self.assertTrue(used)
+        self.assertEqual(p.health, 70.0)
+        self.assertGreater(p.treasure_pickup_timer, 0.0)
+        self.assertNotIn(heal_item, p.inventory.items)
+
 
 class TestPlayerProgression(unittest.TestCase):
     def setUp(self) -> None:

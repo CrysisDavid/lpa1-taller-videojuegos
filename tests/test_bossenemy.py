@@ -3,6 +3,7 @@
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pygame
 
@@ -76,6 +77,46 @@ class TestBossEnemy(unittest.TestCase):
 
         self.assertGreater(damage, 0.0)
         self.assertLess(player.health, player.stats.max_health)
+
+    def test_ai_update_persigue_al_player_y_se_devuelve_si_lo_pasa(self) -> None:
+        boss = BossEnemy(self.screen, Vector2D(500.0, 510.0), "Boss")
+        player = Player(
+            self.screen,
+            Vector2D(300.0, 510.0),
+            "Hero",
+            stats=Stats(max_health=100.0, damage=10.0, defense=5.0),
+        )
+        start_x = boss.position.x
+
+        boss.ai_update(player, [], 0.2, ground_y=510.0)
+
+        self.assertLess(boss.position.x, start_x)
+        self.assertEqual(boss.facing_direction, -1.0)
+
+    def test_ai_update_salta_si_player_esta_mas_arriba(self) -> None:
+        boss = BossEnemy(self.screen, Vector2D(300.0, 510.0), "Boss")
+        player = Player(
+            self.screen,
+            Vector2D(360.0, 420.0),
+            "Hero",
+            stats=Stats(max_health=100.0, damage=10.0, defense=5.0),
+        )
+        start_y = boss.position.y
+
+        boss.ai_update(player, [], 0.1, ground_y=510.0)
+
+        self.assertLess(boss.position.y, start_y)
+        self.assertFalse(boss.on_ground)
+
+    def test_draw_voltea_sprite_cuando_mira_a_la_derecha(self) -> None:
+        boss = BossEnemy(self.screen, Vector2D(300.0, 300.0), "Boss")
+        boss.facing_direction = 1.0
+
+        with patch("entities.bossenemy.pygame.image.load", return_value=pygame.Surface((32, 32))):
+            with patch("entities.bossenemy.pygame.transform.flip", wraps=pygame.transform.flip) as flip_spy:
+                boss.draw()
+
+        self.assertTrue(flip_spy.called)
 
 
 if __name__ == "__main__":
