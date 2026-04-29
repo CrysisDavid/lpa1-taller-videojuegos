@@ -4,6 +4,7 @@ import sys
 
 import pygame
 
+from combat.combat_system import CombatSystem
 from combat.shield import Shield
 from core.vector2d import Vector2D
 from entities.bossenemy import BossEnemy
@@ -43,9 +44,40 @@ class GameManager:
     GROUND_Y: float = 510.0
     VOID_Y_MARGIN: float = 180.0
     STORE_INTERACTION_RANGE: float = 120.0
+    STORE_UNLOCK_CASH: int = 200
 
     VICTORY_CAMERA_X: float = 7000.0
     BOSS_SPAWN_OFFSET_X: float = 1800.0
+    WORLD_BASE_SCROLL_SPEED: float = 200.0
+    TOTAL_ENEMIES_BEFORE_BOSS: int = 20
+
+    # world_speed_multiplier, enemy_damage_multiplier, boss_damage_multiplier, enemy_spawn_interval
+    DIFFICULTY_SETTINGS: dict[str, dict[str, float]] = {
+        "facil": {
+            "world_speed_multiplier": 0.8,
+            "enemy_damage_multiplier": 0.7,
+            "boss_damage_multiplier": 0.7,
+            "enemy_spawn_interval": 2.0,
+        },
+        "media": {
+            "world_speed_multiplier": 1.0,
+            "enemy_damage_multiplier": 1.0,
+            "boss_damage_multiplier": 1.0,
+            "enemy_spawn_interval": 1.2,
+        },
+        "dificil": {
+            "world_speed_multiplier": 1.25,
+            "enemy_damage_multiplier": 1.35,
+            "boss_damage_multiplier": 1.35,
+            "enemy_spawn_interval": 0.7,
+        },
+    }
+    DIFFICULTY_ORDER: tuple[str, str, str] = ("facil", "media", "dificil")
+    DIFFICULTY_DESCRIPTIONS: dict[str, str] = {
+        "facil": "Menos enemigos, mundo mas lento y dano bajo.",
+        "media": "Balance estandar para una partida normal.",
+        "dificil": "Mas enemigos, mundo rapido y dano alto.",
+    }
 
     def __init__(self, screen: pygame.Surface | None = None) -> None:
         pygame.init()
@@ -76,11 +108,34 @@ class GameManager:
         self.boss_enemy: BossEnemy | None = None
         self.messages: list[tuple[str, float]] = []
         self.game_over: bool = False
+        self.paused: bool = False
+        self.current_difficulty: str = "media"
+        self.difficulty_menu_active: bool = False
+        self._difficulty_selection_pending: bool = True
+        self._difficulty_selected_index: int = self.DIFFICULTY_ORDER.index(
+            self.current_difficulty
+        )
+        self.enemy_count_for_run: int = self.TOTAL_ENEMIES_BEFORE_BOSS
+        self.enemy_damage_multiplier: float = self.DIFFICULTY_SETTINGS[
+            self.current_difficulty
+        ]["enemy_damage_multiplier"]
+        self.boss_damage_multiplier: float = self.DIFFICULTY_SETTINGS[
+            self.current_difficulty
+        ]["boss_damage_multiplier"]
+        self.enemy_spawn_interval: float = self.DIFFICULTY_SETTINGS[
+            self.current_difficulty
+        ]["enemy_spawn_interval"]
+        self.enemy_spawn_timer: float = 0.0
+        self.pending_enemy_pool: list[object] = []
+        self.spawned_enemy_total: int = 0
+        self.boss_spawned: bool = False
 
         self.store_dialog_open: bool = False
         self.store_dialog_tab: str = "buy"
         self.store_buy_index: int = 0
         self.store_sell_index: int = 0
+        self.store_unlocked: bool = False
+        self._store_unlock_announced: bool = False
 
         self.font_small: pygame.font.Font = pygame.font.Font(None, 20)
         self.font_medium: pygame.font.Font = pygame.font.Font(None, 24)
@@ -88,6 +143,7 @@ class GameManager:
         self.game_over_image: pygame.Surface = pygame.image.load("public/assets/game-over.png")
         self.game_over_image = pygame.transform.scale(self.game_over_image, (400, 300))
 
+        self._apply_difficulty_settings()
         self.start_game(seed=2026)
 
     # ------------------------------------------------------------------
@@ -192,6 +248,77 @@ class GameManager:
             self.player_vy = 0.0
             self.on_ground = True
 
+    def _update_store_unlock_state(self) -> None:
+        """Desbloquea tienda al alcanzar el umbral de dinero."""
+        if self.store_unlocked:
+            return
+        if self.player.cash >= self.STORE_UNLOCK_CASH:
+            self.store_unlocked = True
+            if not self._store_unlock_announced:
+                self.messages.append(("Tienda desbloqueada!", 1.8))
+                self._store_unlock_announced = True
+
+    def _apply_difficulty_settings(self) -> None:
+        settings = self.DIFFICULTY_SETTINGS[self.current_difficulty]
+        self.enemy_count_for_run = self.TOTAL_ENEMIES_BEFORE_BOSS
+        self.enemy_damage_multiplier = settings["enemy_damage_multiplier"]
+        self.boss_damage_multiplier = settings["boss_damage_multiplier"]
+        self.enemy_spawn_interval = settings["enemy_spawn_interval"]
+        world_speed_multiplier = settings["world_speed_multiplier"]
+        self.world.camera.scroll_speed = self.WORLD_BASE_SCROLL_SPEED * world_speed_multiplier
+
+    def _create_boss_enemy(self) -> BossEnemy:
+        return BossEnemy(
+            self.screen,
+            Vector2D(
+                self.world.camera.offset.x + self.SCREEN_WIDTH + self.BOSS_SPAWN_OFFSET_X,
+                self.GROUND_Y,
+            ),
+            "Boss Prime",
+            attack_power=25.0 * self.boss_damage_multiplier,
+        )
+
+    def _update_enemy_spawning(self, dt: float) -> None:
+        """Spawnea enemigos progresivamente según dificultad y luego habilita el boss."""
+        if self.pending_enemy_pool:
+            self.enemy_spawn_timer += dt
+            while self.enemy_spawn_timer >= self.enemy_spawn_interval and self.pending_enemy_pool:
+                self.enemy_spawn_timer -= self.enemy_spawn_interval
+                enemy = self.pending_enemy_pool.pop(0)
+                self.world.enemies.append(enemy)
+                self.spawned_enemy_total += 1
+            return
+
+        if self.boss_spawned:
+            return
+
+        if any(not enemy.is_defeated for enemy in self.world.enemies):
+            return
+
+        self.boss_enemy = self._create_boss_enemy()
+        self.boss_spawned = True
+        self.messages.append(("Boss detectado!", 2.0))
+
+    def set_difficulty(self, difficulty: str, *, restart: bool = True) -> None:
+        """Configura la dificultad actual y opcionalmente reinicia la partida."""
+        normalized = difficulty.strip().lower()
+        if normalized not in self.DIFFICULTY_SETTINGS:
+            raise ValueError("difficulty debe ser: facil, media o dificil")
+
+        self.current_difficulty = normalized
+        self._apply_difficulty_settings()
+        self.messages.append((f"Dificultad: {normalized.upper()}", 1.8))
+        if restart:
+            self.start_game(seed=self.frame_count)
+
+    def _confirm_difficulty_selection(self, difficulty: str) -> None:
+        """Confirma dificultad elegida desde el menú inicial y arranca partida."""
+        self.set_difficulty(difficulty, restart=False)
+        self.difficulty_menu_active = False
+        self._difficulty_selection_pending = False
+        seed = 2026 if self.frame_count == 0 else self.frame_count
+        self.start_game(seed=seed)
+
     def _snap_player_to_spawn_platform(self) -> None:
         """Posiciona al jugador sobre una plataforma válida al iniciar."""
         if not self.world.platforms:
@@ -225,24 +352,32 @@ class GameManager:
 
     def start_game(self, seed: int | None = None) -> None:
         """Inicializa o reinicia una partida completa."""
-        self.world.generate(seed=seed, collectible_count=12, enemy_count=6)
+        self.world.dynamic_enemy_spawn_enabled = False
+        self.world.dynamic_collectible_spawn_enabled = True
+        self.world.generate(
+            seed=seed,
+            collectible_count=12,
+            enemy_count=self.enemy_count_for_run,
+        )
         self.world.enemies = generate_enemies_from_image(
             self.screen,
             self.world.enemy_spawn_points,
         )
 
+        for enemy in self.world.enemies:
+            enemy.attack_power *= self.enemy_damage_multiplier
+
+        self.pending_enemy_pool = list(self.world.enemies)
+        self.world.enemies = []
+        self.enemy_spawn_timer = 0.0
+        self.spawned_enemy_total = 0
+
         self.player = self._create_player()
         self._snap_player_to_spawn_platform()
         self.hud.player = self.player
         self.store = self._create_store()
-        self.boss_enemy = BossEnemy(
-            self.screen,
-            Vector2D(
-                self.SCREEN_WIDTH + self.BOSS_SPAWN_OFFSET_X,
-                self.GROUND_Y,
-            ),
-            "Boss Prime",
-        )
+        self.boss_enemy = None
+        self.boss_spawned = False
 
         self.player_vy = 0.0
         self.player_vx = 0.0
@@ -252,11 +387,14 @@ class GameManager:
         self.boss_projectiles.clear()
         self.messages.clear()
         self.game_over = False
+        self.paused = False
 
         self.store_dialog_open = False
         self.store_dialog_tab = "buy"
         self.store_buy_index = 0
         self.store_sell_index = 0
+        self.store_unlocked = self.player.cash >= self.STORE_UNLOCK_CASH
+        self._store_unlock_announced = self.store_unlocked
 
     # ------------------------------------------------------------------
     # Tienda
@@ -299,7 +437,25 @@ class GameManager:
 
         return "No se pudo realizar la venta", clamped_index
 
-    def _draw_store_dialog(self) -> None:
+    def _use_selected_inventory_item(self, selected_index: int) -> tuple[str, int]:
+        if not self.player.inventory.items:
+            return "Inventario vacio", 0
+
+        clamped_index: int = max(
+            0,
+            min(selected_index, len(self.player.inventory.items) - 1),
+        )
+        item: Item = self.player.inventory.items[clamped_index]
+        if self.player.use_item(item):
+            if self.player.inventory.items:
+                clamped_index = min(clamped_index, len(self.player.inventory.items) - 1)
+            else:
+                clamped_index = 0
+            return f"Usaste {item.name}", clamped_index
+
+        return f"No se pudo usar {item.name}", clamped_index
+
+    def _draw_store_dialog(self, *, remote_mode: bool = False) -> None:
         overlay = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
         overlay.fill((0, 0, 0, 140))
         self.screen.blit(overlay, (0, 0))
@@ -318,9 +474,15 @@ class GameManager:
             border_radius=12,
         )
 
+        title_text = (
+            "TIENDA REMOTA - Elige que comprar o vender"
+            if remote_mode
+            else "TIENDA - Elige que comprar o vender"
+        )
+        title_color = (255, 210, 140) if remote_mode else (255, 230, 140)
         title = self._render_text_with_background(
-            "TIENDA - Elige que comprar o vender",
-            (255, 230, 140),
+            title_text,
+            title_color,
             (26, 31, 45),
             font=self.font_medium,
         )
@@ -389,11 +551,72 @@ class GameManager:
             self.screen.blit(line_surface, (panel_x + panel_width // 2 + 12, sell_start_y))
 
         help_text = self._render_text_with_background(
-            "TAB cambia panel | Arriba/Abajo seleccionan | ENTER confirma | ESC o E cierra",
+            "TAB cambia panel | Arriba/Abajo seleccionan | ENTER compra/vende | U usa item | ESC o E cierra",
             (170, 200, 255),
             (26, 31, 45),
         )
         self.screen.blit(help_text, (panel_x + 20, panel_y + panel_height - 38))
+
+    def _draw_victory_banner(self) -> None:
+        """Dibuja un cartel de victoria con resumen final de la partida."""
+        overlay = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
+        overlay.fill((0, 0, 0, 155))
+        self.screen.blit(overlay, (0, 0))
+
+        panel_width: int = 560
+        panel_height: int = 290
+        panel_x: int = (self.SCREEN_WIDTH - panel_width) // 2
+        panel_y: int = (self.SCREEN_HEIGHT - panel_height) // 2
+        panel_rect = pygame.Rect(panel_x, panel_y, panel_width, panel_height)
+        pygame.draw.rect(self.screen, (22, 30, 36), panel_rect, border_radius=16)
+        pygame.draw.rect(self.screen, (120, 255, 160), panel_rect, width=3, border_radius=16)
+
+        title = self._render_text_with_background(
+            "HAS GANADO LA PARTIDA",
+            (150, 255, 170),
+            (22, 30, 36),
+            font=self.font_medium,
+            padding=6,
+        )
+        self.screen.blit(
+            title,
+            (self.SCREEN_WIDTH // 2 - title.get_width() // 2, panel_y + 24),
+        )
+
+        defeated_count: int = sum(1 for enemy in self.world.enemies if enemy.is_defeated)
+        summary_lines: list[tuple[str, tuple[int, int, int]]] = [
+            (f"Enemigos vencidos: {defeated_count}", (255, 220, 140)),
+            (f"Experiencia obtenida: {self.player.stats.experience:.0f}", (200, 170, 255)),
+            (f"Dinero obtenido: ${self.player.cash}", (255, 230, 120)),
+            (f"Score final: {self.score:.0f}", (180, 220, 255)),
+        ]
+
+        line_y: int = panel_y + 92
+        for text, color in summary_lines:
+            line_surface = self._render_text_with_background(
+                text,
+                color,
+                (30, 40, 48),
+                font=self.font_medium,
+            )
+            self.screen.blit(
+                line_surface,
+                (self.SCREEN_WIDTH // 2 - line_surface.get_width() // 2, line_y),
+            )
+            line_y += 42
+
+        restart_text = self._render_text_with_background(
+            "Presiona ESPACIO para volver a empezar",
+            (235, 235, 235),
+            (22, 30, 36),
+        )
+        self.screen.blit(
+            restart_text,
+            (
+                self.SCREEN_WIDTH // 2 - restart_text.get_width() // 2,
+                panel_y + panel_height - 44,
+            ),
+        )
 
     # ------------------------------------------------------------------
     # Bucle principal
@@ -401,7 +624,10 @@ class GameManager:
 
     def handle_event(self) -> None:
         """Procesa entrada de teclado/ventana y acciones de UI."""
+        self._update_store_unlock_state()
         is_near_store: bool = (
+            self.store_unlocked
+            and
             self.player.position.distance_to(self.store.position)
             <= self.STORE_INTERACTION_RANGE
         )
@@ -423,20 +649,44 @@ class GameManager:
             if event.type == pygame.QUIT:
                 self.is_playing = False
             elif event.type == pygame.KEYDOWN:
+                if self.difficulty_menu_active:
+                    if event.key == pygame.K_ESCAPE:
+                        self.is_playing = False
+                    elif event.key in (pygame.K_1, pygame.K_KP1):
+                        self._difficulty_selected_index = 0
+                        self._confirm_difficulty_selection("facil")
+                    elif event.key in (pygame.K_2, pygame.K_KP2):
+                        self._difficulty_selected_index = 1
+                        self._confirm_difficulty_selection("media")
+                    elif event.key in (pygame.K_3, pygame.K_KP3):
+                        self._difficulty_selected_index = 2
+                        self._confirm_difficulty_selection("dificil")
+                    elif event.key in (pygame.K_UP, pygame.K_w):
+                        self._difficulty_selected_index = (
+                            self._difficulty_selected_index - 1
+                        ) % len(self.DIFFICULTY_ORDER)
+                    elif event.key in (pygame.K_DOWN, pygame.K_s):
+                        self._difficulty_selected_index = (
+                            self._difficulty_selected_index + 1
+                        ) % len(self.DIFFICULTY_ORDER)
+                    elif event.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+                        selected = self.DIFFICULTY_ORDER[self._difficulty_selected_index]
+                        self._confirm_difficulty_selection(selected)
+                    continue
+
                 if event.key == pygame.K_ESCAPE:
                     if self.store_dialog_open:
                         self.store_dialog_open = False
                     else:
                         self.is_playing = False
+                elif event.key == pygame.K_p and not self.game_over:
+                    self.paused = not self.paused
                 elif event.key == pygame.K_e and not self.game_over:
-                    if not is_near_store:
-                        self.messages.append(("Acercate a la tienda para abrir dialogo", 1.2))
-                    else:
-                        self.store_dialog_open = not self.store_dialog_open
-                        if self.store_dialog_open:
-                            self.store_dialog_tab = "buy"
-                            self.store_buy_index = 0
-                            self.store_sell_index = 0
+                    self.store_dialog_open = not self.store_dialog_open
+                    if self.store_dialog_open:
+                        self.store_dialog_tab = "buy"
+                        self.store_buy_index = 0
+                        self.store_sell_index = 0
                 elif self.store_dialog_open:
                     if event.key in (pygame.K_TAB, pygame.K_LEFT, pygame.K_RIGHT):
                         self.store_dialog_tab = "sell" if self.store_dialog_tab == "buy" else "buy"
@@ -461,14 +711,38 @@ class GameManager:
                         else:
                             result_text, self.store_sell_index = self._sell_selected_item(self.store_sell_index)
                             self.messages.append((result_text, 1.4))
+                    elif event.key == pygame.K_u:
+                        if self.store_dialog_tab == "sell":
+                            result_text, self.store_sell_index = self._use_selected_inventory_item(self.store_sell_index)
+                            self.messages.append((result_text, 1.4))
+                        else:
+                            self.messages.append(("Cambia a VENTA para usar items", 1.2))
+                elif event.key in (pygame.K_1, pygame.K_KP1):
+                    self.set_difficulty("facil", restart=True)
+                elif event.key in (pygame.K_2, pygame.K_KP2):
+                    self.set_difficulty("media", restart=True)
+                elif event.key in (pygame.K_3, pygame.K_KP3):
+                    self.set_difficulty("dificil", restart=True)
+                elif event.key == pygame.K_q and not self.game_over:
+                    result_text, _ = self._use_selected_inventory_item(0)
+                    self.messages.append((result_text, 1.2))
                 elif event.key == pygame.K_SPACE:
                     self.start_game(seed=self.frame_count)
 
     def update(self, dt: float) -> None:
         """Actualiza estado de mundo, jugador y combate."""
-        self.frame_count += 1
+        if self.difficulty_menu_active:
+            return
         if self.game_over:
             return
+        if self.paused:
+            return
+        if self.store_dialog_open:
+            return
+
+        self._update_enemy_spawning(dt)
+
+        self.frame_count += 1
 
         keys = pygame.key.get_pressed()
         input_axis: float = 0.0
@@ -548,6 +822,7 @@ class GameManager:
                 if distance < 50.0:
                     value = collectible.collect_value()
                     self.player.cash += int(value)
+                    self._update_store_unlock_state()
                     self.player.trigger_treasure_pickup_effect()
                     self.messages.append((f"+${value:.0f} (Tesoro)", 2.0))
                     collectible.is_active = False
@@ -572,10 +847,25 @@ class GameManager:
             if not enemy.is_defeated and enemy.attack_cooldown <= 0:
                 distance = self.player.position.distance_to(enemy.position)
                 if distance < 100.0:
-                    dmg = enemy.attack(self.player)
-                    if dmg > 0:
-                        self.messages.append((f"-{dmg:.0f} HP (Enemigo cercano)", 1.5))
+                    combat_result = CombatSystem.resolve_combat(self.player, enemy)
+                    enemy_damage = combat_result["enemy_damage"]
+                    if enemy_damage > 0:
+                        self.messages.append((f"-{enemy_damage:.0f} HP (Enemigo cercano)", 1.5))
                     enemy.attack_cooldown = 1.0
+
+        if self.boss_enemy is not None and not self.boss_enemy.is_defeated:
+            viewport_left_world = self.world.camera.offset.x + self.boss_enemy.radius
+            viewport_right_world = (
+                self.world.camera.offset.x + self.SCREEN_WIDTH - self.boss_enemy.radius
+            )
+            self.boss_enemy.ai_update(
+                self.player,
+                self.world.platforms,
+                dt,
+                ground_y=self.GROUND_Y,
+                viewport_left=viewport_left_world,
+                viewport_right=viewport_right_world,
+            )
 
         if self.boss_enemy is not None and not self.boss_enemy.is_defeated:
             boss_projectile = self.boss_enemy.special_attack(
@@ -642,26 +932,104 @@ class GameManager:
 
     def draw(self) -> None:
         """Renderiza mundo, entidades y capas de interfaz."""
+        if self.difficulty_menu_active:
+            self.screen.fill((18, 22, 34))
+
+            title = self._render_text_with_background(
+                "SELECCIONA DIFICULTAD",
+                (245, 230, 160),
+                (18, 22, 34),
+                font=self.font_medium,
+                padding=6,
+            )
+            self.screen.blit(
+                title,
+                (self.SCREEN_WIDTH // 2 - title.get_width() // 2, 140),
+            )
+
+            y_base: int = 240
+            for i, difficulty in enumerate(self.DIFFICULTY_ORDER):
+                selected = i == self._difficulty_selected_index
+                marker = "> " if selected else "  "
+                color = (120, 245, 160) if selected else (210, 210, 210)
+                line = f"{marker}{i + 1}. {difficulty.upper()}"
+                option = self._render_text_with_background(
+                    line,
+                    color,
+                    (30, 36, 52),
+                    font=self.font_medium,
+                )
+                self.screen.blit(
+                    option,
+                    (self.SCREEN_WIDTH // 2 - option.get_width() // 2, y_base + i * 52),
+                )
+
+                settings = self.DIFFICULTY_SETTINGS[difficulty]
+                desc = self.DIFFICULTY_DESCRIPTIONS[difficulty]
+                details = (
+                    f"{desc} Enemigos: {self.TOTAL_ENEMIES_BEFORE_BOSS} | "
+                    f"Vel mundo: x{settings['world_speed_multiplier']:.2f} | "
+                    f"Spawn: {settings['enemy_spawn_interval']:.1f}s"
+                )
+                detail_surface = self._render_text_with_background(
+                    details,
+                    (150, 180, 210) if selected else (130, 145, 160),
+                    (25, 30, 44),
+                )
+                self.screen.blit(
+                    detail_surface,
+                    (
+                        self.SCREEN_WIDTH // 2 - detail_surface.get_width() // 2,
+                        y_base + i * 52 + 30,
+                    ),
+                )
+
+            menu_controls = self._render_text_with_background(
+                "Menu: 1/2/3 selecciona | ARRIBA/ABAJO navega | ENTER confirma | ESC salir",
+                (160, 190, 230),
+                (18, 22, 34),
+            )
+            self.screen.blit(
+                menu_controls,
+                (self.SCREEN_WIDTH // 2 - menu_controls.get_width() // 2, 500),
+            )
+
+            gameplay_controls = self._render_text_with_background(
+                "Juego: WASD/flechas mover | W/ARRIBA saltar | F disparar | E tienda | ESPACIO reiniciar",
+                (170, 210, 240),
+                (18, 22, 34),
+            )
+            self.screen.blit(
+                gameplay_controls,
+                (self.SCREEN_WIDTH // 2 - gameplay_controls.get_width() // 2, 530),
+            )
+
+            pygame.display.flip()
+            return
+
         self.screen.fill(self.BACKGROUND_COLOR)
 
         is_near_store: bool = (
+            self.store_unlocked
+            and
             self.player.position.distance_to(self.store.position)
             <= self.STORE_INTERACTION_RANGE
         )
 
         self.world.draw(surface=self.screen, camera_offset_x=self.world.camera.offset.x)
 
-        store_screen_x: int = int(self.store.position.x - self.world.camera.offset.x)
-        store_screen_y: int = int(self.store.position.y)
-        store_rect = pygame.Rect(store_screen_x - 26, store_screen_y - 72, 52, 72)
-        store_color = self.STORE_ACTIVE_COLOR if is_near_store else self.STORE_COLOR
-        pygame.draw.rect(self.screen, store_color, store_rect, border_radius=8)
-        pygame.draw.rect(self.screen, (20, 20, 20), store_rect, width=2, border_radius=8)
-        sign_surface = self.font_small.render("STORE", True, (20, 20, 20))
-        self.screen.blit(
-            sign_surface,
-            (store_screen_x - sign_surface.get_width() // 2, store_screen_y - 92),
-        )
+        if self.store_unlocked:
+            store_screen_x: int = int(self.store.position.x - self.world.camera.offset.x)
+            store_screen_y: int = int(self.store.position.y)
+            store_rect = pygame.Rect(store_screen_x - 26, store_screen_y - 72, 52, 72)
+            store_color = self.STORE_ACTIVE_COLOR if is_near_store else self.STORE_COLOR
+            pygame.draw.rect(self.screen, store_color, store_rect, border_radius=8)
+            pygame.draw.rect(self.screen, (20, 20, 20), store_rect, width=2, border_radius=8)
+            sign_surface = self.font_small.render("STORE", True, (20, 20, 20))
+            self.screen.blit(
+                sign_surface,
+                (store_screen_x - sign_surface.get_width() // 2, store_screen_y - 92),
+            )
 
         saved_x = self.player.position.x
         self.player.position.x = self.player.position.x - self.world.camera.offset.x
@@ -695,6 +1063,10 @@ class GameManager:
         info_y: int = 110
         info_x: int = 10
         blocks: list[tuple[str, tuple[int, int, int]]] = [
+            (
+                f"Dificultad: {self.current_difficulty.upper()}",
+                (255, 200, 120),
+            ),
             (f"Camara X: {self.world.camera.offset.x:.0f}", self.UI_COLOR),
             (f"Plataformas: {len(self.world.platforms)}", self.UI_COLOR),
             (
@@ -723,12 +1095,22 @@ class GameManager:
                 (
                     f"Boss HP: {self.boss_enemy.health:.0f}"
                     if self.boss_enemy is not None and not self.boss_enemy.is_defeated
-                    else "Boss HP: 0"
+                    else "Boss HP: --"
                 ),
                 (255, 130, 190),
             ),
             (
-                "TIENDA: EN RANGO" if is_near_store else "Tienda: fuera de rango",
+                f"Spawn enemigos: {self.spawned_enemy_total}/{self.TOTAL_ENEMIES_BEFORE_BOSS}",
+                (255, 200, 140),
+            ),
+            (
+                (
+                    "TIENDA: EN RANGO"
+                    if is_near_store
+                    else "Tienda: fuera de rango"
+                )
+                if self.store_unlocked
+                else f"Tienda bloqueada: ${self.player.cash}/${self.STORE_UNLOCK_CASH}",
                 (100, 255, 140) if is_near_store else (200, 180, 120),
             ),
             (f"Score: {self.score:.0f}", (180, 220, 255)),
@@ -745,7 +1127,7 @@ class GameManager:
             "ENTER confirma | E/ESC cierra"
             if self.store_dialog_open
             else "WASD/flechas: mover | W/arriba: saltar | F: disparar | "
-            "E: tienda | ESPACIO: regenerar | ESC: salir"
+            "Q: usar item | E: tienda | P: pausa | 1/2/3: dificultad | ESPACIO: regenerar | ESC: salir"
         )
         instructions_surface = self._render_text_with_background(
             instructions,
@@ -812,13 +1194,38 @@ class GameManager:
                 ),
             )
 
+        if self.paused and not self.game_over:
+            pause_overlay = pygame.Surface((self.SCREEN_WIDTH, self.SCREEN_HEIGHT), pygame.SRCALPHA)
+            pause_overlay.fill((0, 0, 0, 120))
+            self.screen.blit(pause_overlay, (0, 0))
+            pause_text = self._render_text_with_background(
+                "PAUSA - Presiona P para continuar",
+                (255, 255, 255),
+                (0, 0, 0),
+                font=self.font_medium,
+            )
+            self.screen.blit(
+                pause_text,
+                (
+                    self.SCREEN_WIDTH // 2 - pause_text.get_width() // 2,
+                    self.SCREEN_HEIGHT // 2 - pause_text.get_height() // 2,
+                ),
+            )
+
         if self.store_dialog_open and not self.game_over:
-            self._draw_store_dialog()
+            self._draw_store_dialog(
+                remote_mode=(not self.store_unlocked) or (not is_near_store),
+            )
+
+        if self.boss_enemy is not None and self.boss_enemy.is_defeated:
+            self._draw_victory_banner()
 
         pygame.display.flip()
 
     def check_victory(self) -> bool:
         """Indica si se alcanzaron condiciones de victoria del nivel."""
+        if self.boss_enemy is None:
+            return False
         if self.boss_enemy is not None and not self.boss_enemy.is_defeated:
             return False
         enemies_cleared: bool = all(enemy.is_defeated for enemy in self.world.enemies)
@@ -827,6 +1234,9 @@ class GameManager:
 
     def exec(self) -> None:
         """Ejecuta el loop principal hasta cierre de la partida."""
+        if self._difficulty_selection_pending:
+            self.difficulty_menu_active = True
+
         while self.is_playing:
             dt: float = self.clock.tick(self.TARGET_FPS) / 1000.0
             self.handle_event()
