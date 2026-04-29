@@ -125,6 +125,5 @@ class Enemy(Sprite):
             return
 
         self.position.x -= self.velocity * delta_time
-        self.keep_on_screen()
         if self.attack_cooldown > 0:
             self.attack_cooldown -= delta_time
