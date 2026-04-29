@@ -833,4 +833,4 @@ Antes de aceptar cualquier bloque de código sugerido por IA, verificar:
 - Sistema de tienda y recolección de items
 - Boss con fases y ataques especiales
 
-*Fin del documento — última actualización: v1.1 (28 Abr 2026)*
+*Fin del documento — última actualización: v1.0 (28 Abr 2026)*
